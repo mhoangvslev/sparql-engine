@@ -46,7 +46,7 @@ import BGPStageBuilder from './stages/bgp-stage-builder'
 import BindStageBuilder from './stages/bind-stage-builder'
 import DistinctStageBuilder from './stages/distinct-stage-builder'
 import FilterStageBuilder from './stages/filter-stage-builder'
-// import GlushkovStageBuilder from './stages/glushkov-executor/glushkov-stage-builder'
+import TythorStageBuilder from './stages/tythor-stage-builder/tythor-stage-builder'
 import GraphStageBuilder from './stages/graph-stage-builder'
 import MinusStageBuilder from './stages/minus-stage-builder'
 import ServiceStageBuilder from './stages/service-stage-builder'
@@ -142,7 +142,7 @@ export class PlanBuilder {
     this.use(SPARQL_OPERATION.SERVICE, new ServiceStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.OPTIONAL, new OptionalStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.ORDER_BY, new OrderByStageBuilder(this._dataset))
-    // this.use(SPARQL_OPERATION.PROPERTY_PATH, new GlushkovStageBuilder(this._dataset))
+    this.use(SPARQL_OPERATION.PROPERTY_PATH, new TythorStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UNION, new UnionStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UPDATE, new UpdateStageBuilder(this._dataset))
   }
@@ -205,10 +205,10 @@ export class PlanBuilder {
       context = new ExecutionContext()
       context.cache = this._currentCache
     }
-    // console.log(JSON.stringify(query, null, 4))
+
     // Optimize the logical query execution plan
     query = this._optimizer.optimize(query)
-    // console.log(JSON.stringify(query, null, 4))
+    console.log(JSON.stringify(query, null, 2))
 
     // build physical query execution plan, depending on the query type
     switch (query.type) {
@@ -367,19 +367,19 @@ export class PlanBuilder {
     }
 
     // merge BGPs on the same level
-    let newGroups = []
-    let prec = null
-    for (let i = 0; i < groups.length; i++) {
-      let group = groups[i]
-      if (group.type === 'bgp' && prec !== null && prec.type === 'bgp') {
-        let lastGroup = newGroups[newGroups.length - 1] as Algebra.BGPNode
-        lastGroup.triples = lastGroup.triples.concat((group as Algebra.BGPNode).triples)
-      } else {
-        newGroups.push(group)
-      }
-      prec = groups[i]
-    }
-    groups = newGroups
+    // let newGroups = []
+    // let prec = null
+    // for (let i = 0; i < groups.length; i++) {
+    //   let group = groups[i]
+    //   if (group.type === 'bgp' && prec !== null && prec.type === 'bgp') {
+    //     let lastGroup = newGroups[newGroups.length - 1] as Algebra.BGPNode
+    //     lastGroup.triples = lastGroup.triples.concat((group as Algebra.BGPNode).triples)
+    //   } else {
+    //     newGroups.push(group)
+    //   }
+    //   prec = groups[i]
+    // }
+    // groups = newGroups
 
     return groups.reduce((source, group) => {
       return this._buildGroup(source, group, context)

@@ -237,6 +237,10 @@ export default abstract class Graph {
     throw new SyntaxError('Error: this graph is not capable of evaluating UNION queries')
   }
 
+  evalQuery (query: Algebra.RootNode, context: ExecutionContext): PipelineStage<Bindings> {
+    throw new SyntaxError('Error: this graph is not capable of evaluating SELECT queries')
+  }
+
   /**
    * Evaluates a Basic Graph pattern, i.e., a set of triple patterns, on the Graph using a {@link PipelineStage}.
    * @param  bgp - The set of triple patterns to evaluate
