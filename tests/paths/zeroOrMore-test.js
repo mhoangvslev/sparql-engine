@@ -25,7 +25,6 @@ SOFTWARE.
 'use strict'
 
 const expect = require('chai').expect
-const assert = require('chai').assert
 const { getGraph, TestEngine } = require('../utils.js')
 
 describe('SPARQL property paths: Zero or More paths', () => {
@@ -95,7 +94,7 @@ describe('SPARQL property paths: Zero or More paths', () => {
             }            
             results.push(b)
         }, done, () => {
-            expect(results.length).to.equal(22)
+            expect(results.length).to.equal(21)
             done()
         })
     })

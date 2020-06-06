@@ -28,6 +28,7 @@ const { Parser, Store } = require('n3')
 const fs = require('fs')
 const { HashMapDataset, Graph, PlanBuilder, Pipeline } = require('../dist/api.js')
 const { pick, isArray } = require('lodash')
+const QueryGenerator = new require('sparqljs').Generator()
 
 function getGraph(filePaths, isUnion = false) {
   let graph
@@ -112,6 +113,12 @@ class N3Graph extends Graph {
     const triples = this._store.getTriples(null, null, null)
     this._store.removeTriples(triples)
     return Promise.resolve()
+  }
+
+  evalQuery(root, context) {
+    let engine = new TestEngine(this)
+    let query = QueryGenerator.stringify(root)
+    return engine.execute(query)
   }
 }
 

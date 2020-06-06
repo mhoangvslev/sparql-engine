@@ -69,7 +69,7 @@ describe('SPARQL property paths: sequence paths', () => {
         const iterator = engine.execute(query)
         iterator.subscribe(b => {
             b = b.toObject()
-            expect(b).to.have.keys('?s')
+            expect(b).to.have.property('?s')
             expect(b['?s']).to.be.oneOf(['http://example.org/Alice', 'http://example.org/Carol'])
             results.push(b)
         }, done, () => {

@@ -67,7 +67,7 @@ describe('SPARQL property paths: One or More paths', () => {
             }            
             results.push(b)
         }, done, () => {
-            expect(results.length).to.equal(12)
+            expect(results.length).to.equal(10)
             done()
         })
     })
