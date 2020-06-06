@@ -184,9 +184,9 @@ export default class BGPStageBuilder extends StageBuilder {
    * @return A {@link PipelineStage} used to evaluate a Basic Graph pattern
    */
   _buildIterator (source: PipelineStage<Bindings>, graph: Graph, patterns: Algebra.TripleObject[], context: ExecutionContext): PipelineStage<Bindings> {
-    if (graph._isCapable(GRAPH_CAPABILITY.UNION) && !context.hasProperty(ContextSymbols.FORCE_INDEX_JOIN)) {
-      return boundJoin(source, patterns, graph, this, context)
-    }
+    // if (graph._isCapable(GRAPH_CAPABILITY.UNION) && !context.hasProperty(ContextSymbols.FORCE_INDEX_JOIN)) {
+    //   return boundJoin(source, patterns, graph, this, context)
+    // }
     return bgpEvaluation(source, patterns, graph, this, context)
   }
 
