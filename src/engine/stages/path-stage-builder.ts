@@ -48,7 +48,7 @@ function boundPathTriple (triple: Algebra.PathTripleObject, bindings: Bindings):
     t.subject = bindings.get(triple.subject)!
   }
   if (triple.object.startsWith('?') && bindings.has(triple.object)) {
-    t.object = bindings.get(triple.subject)!
+    t.object = bindings.get(triple.object)!
   }
   return t
 }
@@ -113,11 +113,6 @@ export default abstract class PathStageBuilder extends StageBuilder {
       }
       if (rdf.isVariable(obj)) {
         temp.set(obj, triple.object)
-      }
-      // TODO: change the function's behavior for ask queries when subject and object are given
-      if (!rdf.isVariable(subject) && !rdf.isVariable(obj)) {
-        temp.set('?ask_s', triple.subject)
-        temp.set('?ask_v', triple.object)
       }
       return temp
     })
