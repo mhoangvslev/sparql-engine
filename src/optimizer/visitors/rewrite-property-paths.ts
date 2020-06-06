@@ -185,6 +185,7 @@ export default class RewritePropertyPaths extends PlanVisitor {
         } else {
             node = {type: 'group', patterns: []}
         }
+
         if (forward.length > 0) {
             let bgp: Algebra.BGPNode = {triples: cloneDeep(context), type: 'bgp'}
             bgp.triples.push({
@@ -232,6 +233,23 @@ export default class RewritePropertyPaths extends PlanVisitor {
     }
 
     visitOneOrMoreExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
+        // let node: Algebra.BGPNode = {
+        //     type: 'bgp',
+        //     triples: cloneDeep(context)
+        // }
+        // node.triples.push({
+        //     subject: pathTriple.subject,
+        //     predicate: pathTriple.predicate.items[0],
+        //     object: `?tythorVar_${this._numVariable}`
+        // } as Algebra.PathTripleObject | Algebra.TripleObject)
+        // pathTriple.predicate.pathType = '*'
+        // node.triples.push({
+        //     subject: `?tythorVar_${this._numVariable}`,
+        //     predicate: pathTriple.predicate,
+        //     object: pathTriple.object
+        // } as Algebra.PathTripleObject)
+        // this._numVariable++
+        // return this.visit(node)
         let node: Algebra.BGPNode = {
             type: 'bgp',
             triples: cloneDeep(context)

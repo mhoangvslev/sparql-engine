@@ -28,6 +28,7 @@ import { Algebra } from 'sparqljs'
 import PlanVisitor from './plan-visitor'
 import UnionMerge from './visitors/union-merge'
 import RewritePropertyPaths from './visitors/rewrite-property-paths'
+import ReorderBasicGraphPatternTriples from './visitors/reorder-bgp-triples'
 
 /**
  * An Optimizer applies a set of optimization rules, implemented using subclasses of {@link PlanVisitor}.
@@ -48,6 +49,7 @@ export default class Optimizer {
     const opt = new Optimizer()
     opt.addVisitor(new RewritePropertyPaths())
     opt.addVisitor(new UnionMerge())
+    opt.addVisitor(new ReorderBasicGraphPatternTriples())
     return opt
   }
 
