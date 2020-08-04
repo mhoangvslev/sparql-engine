@@ -207,8 +207,9 @@ export class PlanBuilder {
     }
 
     // Optimize the logical query execution plan
+    // console.log(JSON.stringify(query, null, 2))
     query = this._optimizer.optimize(query)
-    console.log(JSON.stringify(query, null, 2))
+    // console.log(JSON.stringify(query))
 
     // build physical query execution plan, depending on the query type
     switch (query.type) {

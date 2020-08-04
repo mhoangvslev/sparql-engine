@@ -85,7 +85,7 @@ export abstract class Consumer extends Writable implements Consumable {
       this._source.subscribe(triple => {
         this.write(triple)
       }, reject, () => {
-        this.end(null, '', resolve)
+        this.end(null, "utf-8", resolve)
       })
     })
   }

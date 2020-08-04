@@ -26,14 +26,7 @@ SOFTWARE.
 
 import PlanVisitor from '../plan-visitor'
 import { Algebra } from 'sparqljs'
-import { cloneDeep, partition } from 'lodash'
-
-function isPathTripleObject (triple: Algebra.PathTripleObject | Algebra.TripleObject): triple is Algebra.PathTripleObject {
-    if (typeof triple.predicate !== 'string') {
-        return true
-    }
-    return false
-}
+import { cloneDeep } from 'lodash'
 
 /**
  * Implements a simple Property Path rewriting: non-transitive expression are extracted and injected in the BGP
@@ -55,227 +48,189 @@ export default class RewritePropertyPaths extends PlanVisitor {
      * @return The transformed Basic Graph Pattern node
      */
     visitBGP (node: Algebra.BGPNode): Algebra.PlanNode {
-        let newNode = cloneDeep(node) 
-        for (let i = 0; i < newNode.triples.length; i++) {
-            let triple = newNode.triples[i]
-            if (isPathTripleObject(triple)) {
-                newNode.triples.splice(i, 1)
-                return this.visitPropertyPath(triple, newNode.triples)
-            }
+        let newNode = cloneDeep(node)
+        for (let i = 0; i < node.triples.length; i++) {
+            let triple = node.triples[i]
+            if (this.isPathTriple(triple)) {
+                switch (triple.predicate.pathType) {
+                    case '/':
+                        let sequenceNode: Algebra.BGPNode = {triples: [], type: 'bgp'} 
+                        sequenceNode.triples.push(...newNode.triples)
+                        sequenceNode.triples.splice(i, 1)
+                        sequenceNode.triples.push(...this.rewriteSequenceExpression(triple))
+                        return this.visit(sequenceNode)
+                    case '|':
+                        let alternativeNode: Algebra.GroupNode = {patterns: [], type: 'union'}
+                        for (let alternativeClause of this.rewriteAlternativeExpression(triple)) {
+                            let clauseNode: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                            clauseNode.triples.push(...newNode.triples)
+                            clauseNode.triples.splice(i, 1)
+                            clauseNode.triples.push(alternativeClause)
+                            alternativeNode.patterns.push(clauseNode)
+                        }
+                        return this.visit(alternativeNode)
+                    case '^':
+                        let inverseNode: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                        inverseNode.triples.push(...newNode.triples)
+                        inverseNode.triples.splice(i, 1)
+                        inverseNode.triples.push(this.rewriteInverseExpression(triple))
+                        return this.visit(inverseNode)
+                    case '!':
+                        let [forward, backward] = this.extractNegatedPredicates(triple.predicate)
+                        if (forward.length > 0 && backward.length === 0) {
+                            let forwardGroup: Algebra.GroupNode = {patterns: [], type: 'group'}
+                            let forwardBGP: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                            forwardBGP.triples.push(...newNode.triples)
+                            forwardBGP.triples.splice(i, 1)
+                            forwardBGP.triples.push({
+                                subject: triple.subject,
+                                predicate: `?tythorVar_${this._numVariable}`,
+                                object: triple.object                 
+                            })
+                            forwardGroup.patterns.push(forwardBGP, this.buildFilter(`?tythorVar_${this._numVariable++}`, forward))
+                            return this.visit(forwardGroup)
+                        } else if (forward.length === 0 && backward.length > 0) {
+                            let backwardGroup: Algebra.GroupNode = {patterns: [], type: 'group'}
+                            let backwardBGP: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                            backwardBGP.triples.push(...newNode.triples)
+                            backwardBGP.triples.splice(i, 1)
+                            backwardBGP.triples.push({
+                                subject: triple.object,
+                                predicate: `?tythorVar_${this._numVariable}`,
+                                object: triple.subject                 
+                            })
+                            backwardGroup.patterns.push(backwardBGP, this.buildFilter(`?tythorVar_${this._numVariable++}`, backward))
+                            return this.visit(backwardGroup)
+                        } else if (forward.length > 0 && backward.length > 0) {
+                            let negationUnion: Algebra.GroupNode = {patterns: [], type: 'union'}
+                            let forwardGroup: Algebra.GroupNode = {patterns: [], type: 'group'}
+                            let backwardGroup: Algebra.GroupNode = {patterns: [], type: 'group'}
+                            let forwardBGP: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                            let backwardBGP: Algebra.BGPNode = {triples: [], type: 'bgp'}
+                            forwardBGP.triples.push(...newNode.triples)
+                            forwardBGP.triples.splice(i, 1)
+                            forwardBGP.triples.push({
+                                subject: triple.subject,
+                                predicate: `?tythorVar_${this._numVariable}`,
+                                object: triple.object                 
+                            })
+                            forwardGroup.patterns.push(forwardBGP, this.buildFilter(`?tythorVar_${this._numVariable++}`, forward))
+                            backwardBGP.triples.push(...newNode.triples)
+                            backwardBGP.triples.splice(i, 1)
+                            backwardBGP.triples.push({
+                                subject: triple.object,
+                                predicate: `?tythorVar_${this._numVariable}`,
+                                object: triple.subject                 
+                            })
+                            backwardGroup.patterns.push(backwardBGP, this.buildFilter(`?tythorVar_${this._numVariable++}`, backward))
+                            negationUnion.patterns.push(forwardGroup, backwardGroup)
+                            return this.visit(negationUnion)
+                        }
+                        return newNode
+                    case '*':
+                    case '+':
+                    case '?':
+                    default:
+                        break
+                }
+            } 
         }
         return newNode
     }
 
-    visitSequenceExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        let node: Algebra.BGPNode = {
-            triples: cloneDeep(context),
-            type: 'bgp'
-        }
-        node.triples.push({
-            subject: pathTriple.subject,
-            predicate: cloneDeep(pathTriple.predicate.items[0]),
-            object: `?tythorVar_${this._numVariable}`
-        } as Algebra.TripleObject | Algebra.PathTripleObject)
-        let sequenceLength = pathTriple.predicate.items.length
-        for (let i = 1; i < sequenceLength - 1; i++) {
-            node.triples.push({
-                subject: `?tythorVar_${this._numVariable}`,
-                predicate: cloneDeep(pathTriple.predicate.items[i]),
-                object: `?tythorVar_${++this._numVariable}`
-            } as Algebra.TripleObject | Algebra.PathTripleObject)
-        }
-        node.triples.push({
-            subject: `?tythorVar_${this._numVariable}`,
-            predicate: cloneDeep(pathTriple.predicate.items[sequenceLength - 1]),
-            object: pathTriple.object
-        } as Algebra.TripleObject | Algebra.PathTripleObject)
-        this._numVariable++
-        return this.visit(node)
+    private isPathTriple (triple: Algebra.TripleObject|Algebra.PathTripleObject): triple is Algebra.PathTripleObject {
+        return typeof triple.predicate !== 'string'
     }
 
-    visitAlternativeExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        let node: Algebra.GroupNode = {
-            patterns: [],
-            type: 'union'
-        }
-        for (let expression of pathTriple.predicate.items) {
-            let bgp: Algebra.BGPNode = {
-                triples: cloneDeep(context),
-                type: 'bgp'
-            }
-            bgp.triples.push({
-                subject: pathTriple.subject,
-                predicate: cloneDeep(expression),
-                object: pathTriple.object
-            } as Algebra.TripleObject | Algebra.PathTripleObject)
-            node.patterns.push(bgp)
-        }
-        return this.visit(node)
-    }
+    private extractNegatedPredicates (expression: string|Algebra.PropertyPath): [Array<string>, Array<string>] {
+        let forward = []
+        let backward = []
 
-    visitInverseExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        let node: Algebra.BGPNode = {
-            triples: cloneDeep(context),
-            type: 'bgp'
-        }
-        node.triples.push({
-            subject: pathTriple.object,
-            predicate: cloneDeep(pathTriple.predicate.items[0]),
-            object: pathTriple.subject
-        } as Algebra.TripleObject | Algebra.PathTripleObject)
-        return this.visit(node)
-    }
-
-    visitNegatedExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        
-        function extractNegatedPredicates (predicates: Array<string | Algebra.PropertyPath>): [Array<string>, Array<string>] {
-            let forward = []
-            let backward = []
-
-            for (let predicate of predicates) {
-                if (typeof predicate === 'string') {
-                    forward.push(predicate)
-                } else {
-                    backward.push(predicate.items[0] as string)
+        if (typeof expression === 'string') {
+            forward.push(expression)
+        } else if (expression.pathType === '^' && typeof expression.items[0] === 'string') {
+            backward.push(expression.items[0])
+        } else if (expression.pathType === '|') {
+            for (let subexpression of expression.items) {
+                if (typeof subexpression === 'string') {
+                    forward.push(subexpression)
+                } else if (subexpression.pathType === '^' && typeof subexpression.items[0] === 'string') {
+                    backward.push(subexpression.items[0])
                 }
             }
-            return [forward, backward]
         }
 
-        function buildFilter (variable: string, predicates: Array<string>): Algebra.FilterNode {
-            let node: Algebra.FilterNode = {
-                type: 'filter',
-                expression: {
+        return [forward, backward]
+    }
+
+    private buildFilter (variable: string, predicates: Array<string>): Algebra.FilterNode {
+        let node: Algebra.FilterNode = {
+            type: 'filter',
+            expression: {
+                type: 'operation',
+                operator: '!=',
+                args: [variable, predicates[0]]
+            }
+        }
+        for (let i = 1; i < predicates.length; i++) {
+            let expression: Algebra.SPARQLExpression = {
+                type: 'operation',
+                operator: '&&',
+                args: [node.expression, {
                     type: 'operation',
                     operator: '!=',
-                    args: [variable, predicates[0]]
-                }
+                    args: [variable, predicates[i]]
+                }]
             }
-            for (let i = 1; i < predicates.length; i++) {
-                let expression: Algebra.SPARQLExpression = {
-                    type: 'operation',
-                    operator: '&&',
-                    args: [node.expression, {
-                        type: 'operation',
-                        operator: '!=',
-                        args: [variable, predicates[i]]
-                    }]
-                }
-                node.expression = expression
-            }
-            return node
+            node.expression = expression
         }
-        
-        let negatedPredicates = []
-        if (typeof pathTriple.predicate.items[0] === 'string') {
-            negatedPredicates = pathTriple.predicate.items
-        } else if (pathTriple.predicate.items[0].pathType === '^') {
-            negatedPredicates = pathTriple.predicate.items
-        } else if (pathTriple.predicate.items[0].pathType === '|') {
-            let alternativeExpression = pathTriple.predicate.items[0] as Algebra.PropertyPath
-            negatedPredicates = alternativeExpression.items
-        } else {
-            throw new Error(`Unexpected operator ${pathTriple.predicate.items[0].pathType} as child of !`)
-        }
-
-        let [forward, backward] = extractNegatedPredicates(negatedPredicates)
-        let node: Algebra.GroupNode
-        if (forward.length > 0 && backward.length > 0) {
-            node = {type: 'union', patterns: []}
-        } else {
-            node = {type: 'group', patterns: []}
-        }
-
-        if (forward.length > 0) {
-            let bgp: Algebra.BGPNode = {triples: cloneDeep(context), type: 'bgp'}
-            bgp.triples.push({
-                subject: pathTriple.subject,
-                predicate: `?tythorVar_${this._numVariable}`,
-                object: pathTriple.object
-            })
-            node.patterns.push({
-                type: 'group',
-                patterns: [bgp, buildFilter(`?tythorVar_${this._numVariable}`, forward)]
-            } as Algebra.PlanNode)
-        }
-        if (backward.length > 0) {
-            let bgp: Algebra.BGPNode = {triples: cloneDeep(context), type: 'bgp'}
-            bgp.triples.push({
-                subject: pathTriple.object,
-                predicate: `?tythorVar_${this._numVariable}`,
-                object: pathTriple.subject
-            })
-            node.patterns.push({
-                type: 'group',
-                patterns: [bgp, buildFilter(`?tythorVar_${this._numVariable}`, backward)]
-            } as Algebra.PlanNode)
-        }
-        this._numVariable++
         return node
     }
 
-    visitZeroOrOneExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        let node: Algebra.BGPNode = {
-            type: 'bgp',
-            triples: cloneDeep(context)
-        }
-        node.triples.push(pathTriple)
-        return node
+    private rewriteInverseExpression (triple: Algebra.PathTripleObject): Algebra.TripleObject|Algebra.PathTripleObject {
+        return {
+            subject: triple.object,
+            predicate: triple.predicate.items[0],
+            object: triple.subject
+        } as Algebra.TripleObject|Algebra.PathTripleObject
     }
 
-    visitZeroOrMoreExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        let node: Algebra.BGPNode = {
-            type: 'bgp',
-            triples: cloneDeep(context)
+    private rewriteSequenceExpression (triple: Algebra.PathTripleObject): Array<Algebra.TripleObject|Algebra.PathTripleObject> {
+        let triples = new Array<Algebra.TripleObject|Algebra.PathTripleObject>()
+        let expression = triple.predicate.items[0]
+
+        triples.push({
+            subject: triple.subject,
+            predicate: expression,
+            object: `?tythorVar_${this._numVariable}`
+        } as Algebra.TripleObject|Algebra.PathTripleObject)
+
+        for (let i = 1; i < triple.predicate.items.length - 1; i++) {
+            expression = triple.predicate.items[i]
+            triples.push({
+                subject: `?tythorVar_${this._numVariable}`,
+                predicate: expression,
+                object: `?tythorVar_${++this._numVariable}`
+            } as Algebra.TripleObject|Algebra.PathTripleObject)
         }
-        node.triples.push(pathTriple)
-        return node
+
+        expression = triple.predicate.items[triple.predicate.items.length - 1]
+
+        triples.push({
+            subject: `?tythorVar_${this._numVariable++}`,
+            predicate: expression,
+            object: triple.object
+        } as Algebra.TripleObject|Algebra.PathTripleObject)
+        return triples
     }
 
-    visitOneOrMoreExpression (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        // let node: Algebra.BGPNode = {
-        //     type: 'bgp',
-        //     triples: cloneDeep(context)
-        // }
-        // node.triples.push({
-        //     subject: pathTriple.subject,
-        //     predicate: pathTriple.predicate.items[0],
-        //     object: `?tythorVar_${this._numVariable}`
-        // } as Algebra.PathTripleObject | Algebra.TripleObject)
-        // pathTriple.predicate.pathType = '*'
-        // node.triples.push({
-        //     subject: `?tythorVar_${this._numVariable}`,
-        //     predicate: pathTriple.predicate,
-        //     object: pathTriple.object
-        // } as Algebra.PathTripleObject)
-        // this._numVariable++
-        // return this.visit(node)
-        let node: Algebra.BGPNode = {
-            type: 'bgp',
-            triples: cloneDeep(context)
-        }
-        node.triples.push(pathTriple)
-        return node
-    }
-
-    visitPropertyPath (pathTriple: Algebra.PathTripleObject, context: Array<Algebra.TripleObject|Algebra.PathTripleObject>): Algebra.PlanNode {
-        switch (pathTriple.predicate.pathType) {
-            case '/':
-                return this.visitSequenceExpression(pathTriple, context)
-            case '|':
-                return this.visitAlternativeExpression(pathTriple, context)
-            case '^':
-                return this.visitInverseExpression(pathTriple, context)
-            case '!':
-                return this.visitNegatedExpression(pathTriple, context)
-            case '?':
-                return this.visitZeroOrOneExpression(pathTriple, context)
-            case '*':
-                return this.visitZeroOrMoreExpression(pathTriple, context)
-            case '+':
-                return this.visitOneOrMoreExpression(pathTriple, context)
-            default:
-                throw new Error(`Unsupported Property Path expression: ${pathTriple.predicate.pathType}`)
-        }
+    private rewriteAlternativeExpression (triple: Algebra.PathTripleObject): Array<Algebra.TripleObject|Algebra.PathTripleObject> {
+        return triple.predicate.items.map((expression: string|Algebra.PropertyPath) => {
+            return {
+                subject: triple.subject,
+                predicate: expression,
+                object: triple.object
+            } as Algebra.TripleObject | Algebra.PathTripleObject
+        })
     }
 }

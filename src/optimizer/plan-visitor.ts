@@ -120,7 +120,17 @@ export default class PlanVisitor {
    * @return The transformed SPARQL FILTER node
    */
   visitFilter (node: Algebra.FilterNode): Algebra.PlanNode {
-    return node
+    const newNode = cloneDeep(node)
+    switch (node.expression.operator) {
+      case 'exists':
+        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode)) 
+        return newNode
+      case 'notexists':
+        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode)) 
+        return newNode
+      default:
+        return newNode
+    }
   }
 
   /**

@@ -1,12 +1,12 @@
 import PlanVisitor from "../plan-visitor";
 import { Algebra } from "sparqljs"
 import { rdf } from "../../api"
-import { cloneDeep } from "lodash"
+import { cloneDeep, isEqual } from "lodash"
 
 class ReorderRules {
     public static TERM: number = 1
     public static VAR: number = 2
-    public static PATH: number = 3
+    public static PATH: number = 4
 
     public static MAX_WEIGHT = 100
 
@@ -24,9 +24,10 @@ class ReorderRules {
         {subject: ReorderRules.VAR, predicate: ReorderRules.VAR, object: ReorderRules.VAR, weigth: 90},
 
         {subject: ReorderRules.TERM, predicate: ReorderRules.PATH, object: ReorderRules.TERM, weigth: 2},
-        {subject: ReorderRules.TERM, predicate: ReorderRules.PATH, object: ReorderRules.VAR, weigth: 5},
-        {subject: ReorderRules.VAR, predicate: ReorderRules.PATH, object: ReorderRules.TERM, weigth: 10}
-        ,
+
+        {subject: ReorderRules.TERM, predicate: ReorderRules.PATH, object: ReorderRules.VAR, weigth: 8},
+        {subject: ReorderRules.VAR, predicate: ReorderRules.PATH, object: ReorderRules.TERM, weigth: 10},
+
         {subject: ReorderRules.VAR, predicate: ReorderRules.PATH, object: ReorderRules.VAR, weigth: 100}
     ]
 }
@@ -49,22 +50,25 @@ export default class ReorderBasicGraphPatternTriples extends PlanVisitor {
         let predicate = ReorderRules.VAR
         let object = ReorderRules.VAR
         
-        if (!rdf.isVariable(triple.subject) || boundVariables.indexOf(triple.subject) > -1) {
+        if (!rdf.isVariable(triple.subject)) {
             subject = ReorderRules.TERM
-        }
+        } 
 
-        if (typeof triple.predicate === 'string' && (!rdf.isVariable(triple.predicate) || boundVariables.indexOf(triple.predicate) > -1)) {
-            predicate = ReorderRules.TERM
-        } else if (typeof triple.predicate !== 'string') {
+        if (typeof triple.predicate === 'string' && !rdf.isVariable(triple.predicate)) {
+            predicate = ReorderRules.TERM  
+        } else {
             predicate = ReorderRules.PATH
         }
 
-        if (!rdf.isVariable(triple.object) || boundVariables.indexOf(triple.object) > -1) {
+        if (!rdf.isVariable(triple.object)) {
             object = ReorderRules.TERM
-        }
+        } 
 
         for (let pattern of ReorderRules.patterns) {
             if (pattern.subject === subject && pattern.predicate === predicate && pattern.object === object) {
+                if (typeof triple.predicate !== 'string' && ['*','+'].includes(triple.predicate.pathType)) {
+                    return pattern.weigth + 1
+                }
                 return pattern.weigth
             }
         }
@@ -86,45 +90,39 @@ export default class ReorderBasicGraphPatternTriples extends PlanVisitor {
     }
 
     private selectMinWeightedJoinTriple(triples: Array<Algebra.TripleObject|Algebra.PathTripleObject>, boundVariables: Array<string>): Algebra.TripleObject|Algebra.PathTripleObject|undefined {
-        let exists = false
-        let minWeight = 0
-        let tripleIndex = 0
+        let joinTriples = triples.filter((triple) => {
+            if (boundVariables.includes(triple.subject) || boundVariables.includes(triple.object)) {
+                return true
+            } else if (typeof triple.predicate === 'string') {
+                return boundVariables.includes(triple.predicate)
+            } else {
+                return false
+            }
+        })
+
+        if (joinTriples.length === 0) {
+            return undefined
+        }
         
-        for (let i = 1, len = triples.length; i < len && !exists; i++) {
-            let triple = triples[i]
-            if (boundVariables.indexOf(triple.subject) > -1 || boundVariables.indexOf(triple.object) > -1) {
-                minWeight = this.getWeight(triple, boundVariables)
-                tripleIndex = i
-                exists = true
-            } else if (typeof triple.predicate === 'string' && boundVariables.indexOf(triple.predicate) > -1) {
-                minWeight = this.getWeight(triple, boundVariables)
-                tripleIndex = i
-                exists = true
+        let selectedTriple = this.selectMinWeightedTriple(joinTriples, boundVariables)
+        
+        for (let i = 0; i < triples.length; i++) {
+            if (isEqual(triples[i], selectedTriple)) {
+                return triples.splice(i, 1)[0]
             }
         }
 
-        if (exists) {
-            for (let i = 0, len = triples.length; i < len; i++) {
-                let weigth = this.getWeight(triples[i], boundVariables)
-                if (minWeight > weigth) {
-                    minWeight = weigth
-                    tripleIndex = i
-                }
-            }
-            return triples.splice(tripleIndex, 1)[0]
-        }
-        
-        return undefined
+        throw new Error('Something went wrong during join ordering...')
     }
 
     private updateBoundVariable(triple: Algebra.TripleObject|Algebra.PathTripleObject, boundVariables: Array<string>): void {
-        if (rdf.isVariable(triple.subject)) {
+        if (rdf.isVariable(triple.subject) && !boundVariables.includes(triple.subject)) {
             boundVariables.push(triple.subject)
         }
-        if (typeof triple.predicate === 'string' && rdf.isVariable(triple.predicate)) {
+        if (typeof triple.predicate === 'string' && rdf.isVariable(triple.predicate) && !boundVariables.includes(triple.predicate)) {
             boundVariables.push(triple.predicate)
         }
-        if (rdf.isVariable(triple.object)) {
+        if (rdf.isVariable(triple.object) && !boundVariables.includes(triple.object)) {
             boundVariables.push(triple.object)
         }
     }
