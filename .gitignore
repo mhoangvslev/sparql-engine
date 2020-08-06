@@ -6,7 +6,6 @@ yarn-debug.log*
 yarn-error.log*
 *.lcov
 
-dist/
 docs/
 examples/testing_db/
 
