@@ -47,7 +47,7 @@ export default class Optimizer {
    */
   static getDefault (): Optimizer {
     const opt = new Optimizer()
-    opt.addVisitor(new RewritePropertyPaths())
+    // opt.addVisitor(new RewritePropertyPaths())
     opt.addVisitor(new UnionMerge())
     opt.addVisitor(new ReorderBasicGraphPatternTriples())
     return opt

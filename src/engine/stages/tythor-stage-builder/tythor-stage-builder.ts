@@ -9,6 +9,8 @@ import { AlternativeTransition } from "./automaton-model/alternative-transition"
 import { TyThorEngine } from "./tythor-engine/tythor-engine";
 import { StatesMergingOptimizer } from "./automaton-optimizer/states-merging";
 import { DistinctPathsOptimizer } from "./automaton-optimizer/distinct-paths";
+import { TyThorEngineWithoutNodeRemembering } from "./tythor-engine/tythor-engine-without-node-remembering";
+import { Transition } from "./automaton-model/transition";
 
 /**
  * @author Julien Aimonier-Davat
@@ -16,18 +18,29 @@ import { DistinctPathsOptimizer } from "./automaton-optimizer/distinct-paths";
 export default class TythorStageBuilder extends PathStageBuilder {
     
     _executePropertyPath(subject: string, path: Algebra.PropertyPath, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
-        let tythorEngine: TyThorEngine = new TyThorEngine()
-        
+        // let tythorEngine: TyThorEngine = new TyThorEngine()
+
+        let tythorEngine: TyThorEngine
+        let automaton: Automaton<Transition>
+
         let forward = !rdf.isVariable(subject) || (rdf.isVariable(subject) && rdf.isVariable(obj))
-        let automaton: Automaton<AlternativeTransition> = new PathsMergingOptimizer().optimize(
-            new DistinctPathsOptimizer().optimize(
-                new StatesMergingOptimizer().optimize(
-                    new PathsCompressionOptimizer().optimize(
-                        new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
-                    )
-                )
-            )
-        )
+        // let automaton: Automaton<AlternativeTransition> = new PathsMergingOptimizer().optimize(
+        //     new DistinctPathsOptimizer().optimize(
+        //         new StatesMergingOptimizer().optimize(
+        //             new PathsCompressionOptimizer().optimize(
+        //                 new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+        //             )
+        //         )
+        //     )
+        // )
+
+        if (path.pathType === '*' || path.pathType === '+') {
+            tythorEngine = new TyThorEngine()
+            automaton = new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+        } else {
+            tythorEngine = new TyThorEngineWithoutNodeRemembering()
+            automaton = new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+        }
 
         let engine = Pipeline.getInstance()
         let solutions = tythorEngine.evalPropertyPaths(forward ? subject : obj, automaton, forward ? obj : subject, graph, context)
