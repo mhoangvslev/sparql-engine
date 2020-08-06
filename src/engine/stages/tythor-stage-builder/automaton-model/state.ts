@@ -1,3 +1,6 @@
+/**
+ * @author Julien Aimonier-Davat
+ */
 export class State {
     private _name: number
     private _isInitial: boolean

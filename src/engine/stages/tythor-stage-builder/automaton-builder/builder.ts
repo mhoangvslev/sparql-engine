@@ -1,9 +1,10 @@
 import { BuilderAlgebra } from 'sparqljs'
 import { cloneDeep } from 'lodash'
 import { Automaton } from '../automaton-model/automaton'
-import { State } from '../automaton-model/automaton-state'
+import { State } from '../automaton-model/state'
 import { isNode, isPathNode, isPropertyNode/*, isTransitiveNode*/ } from '../utils'
-import { Transition } from '../automaton-model/automaton-transition'
+import { PropertyTransition } from '../automaton-model/property-transition'
+import { Instruction } from '../automaton-model/instruction'
 
 function union(setA: Set<number>, setB: Set<number>): Set<number> {
     let union: Set<number> = new Set(setA);
@@ -13,6 +14,10 @@ function union(setA: Set<number>, setB: Set<number>): Set<number> {
     return union;
 }
 
+
+/**
+ * @author Julien Aimonier-Davat
+ */
 class GlushkovAutomatonBuilder {
 
     private syntaxTree: BuilderAlgebra.PropertyPath
@@ -157,8 +162,8 @@ class GlushkovAutomatonBuilder {
         this.visitNode(node)
     }
 
-    public build(): Automaton {
-        let automaton = new Automaton()
+    public build(): Automaton<PropertyTransition> {
+        let automaton = new Automaton<PropertyTransition>()
         let root = this.syntaxTree
 
         // Creates and adds the initial state
@@ -176,7 +181,8 @@ class GlushkovAutomatonBuilder {
             let toState: State = automaton.findState(value)!
             let toNode: BuilderAlgebra.Node = this.properties.get(value)!
             if (isPropertyNode(toNode)) {
-                let transition = new Transition(initialState, toState, toNode.items, toNode.inverse, toNode.negation)
+                let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
+                let transition = new PropertyTransition(initialState, toState, instruction)
                 automaton.addTransition(transition)
             } else {
                 throw new Error(`Unknown node encountered during automaton construction`)
@@ -191,7 +197,8 @@ class GlushkovAutomatonBuilder {
                 let toState: State = automaton.findState(to)!
                 let toNode: BuilderAlgebra.Node = this.properties.get(to)!
                 if (isPropertyNode(toNode)) {
-                    let transition = new Transition(fromState, toState, toNode.items, toNode.inverse, toNode.negation)
+                    let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
+                    let transition = new PropertyTransition(fromState, toState, instruction)
                     automaton.addTransition(transition)
                 } else {
                     throw new Error(`Unknown node encountered during automaton construction`)
@@ -202,6 +209,9 @@ class GlushkovAutomatonBuilder {
     }
 }
 
+/**
+ * @author Julien Aimonier-Davat
+ */
 export class AutomatonBuilder {
 
     private rewriteNegations(node: BuilderAlgebra.PropertyPath) {
@@ -370,7 +380,7 @@ export class AutomatonBuilder {
         }
     }
 
-    public build(propertyPath: BuilderAlgebra.PropertyPath, forward: boolean): Automaton {
+    public build(propertyPath: BuilderAlgebra.PropertyPath, forward: boolean): Automaton<PropertyTransition> {
         let syntaxTree = cloneDeep(propertyPath)
         this.initializeTree(syntaxTree)
         if (!forward) {

@@ -1,11 +1,16 @@
-import { Automaton } from './../automaton-model/automaton'
-import { State } from './../automaton-model/automaton-state'
-import { Transition } from './../automaton-model/automaton-transition'
+import { Automaton } from '../automaton-model/automaton'
+import { State } from '../automaton-model/state'
+import { SequenceTransition } from '../automaton-model/sequence-transition'
 import { cloneDeep } from 'lodash'
+import { PropertyTransition } from '../automaton-model/property-transition'
 
-export class PathsContractionOptimizer {
 
-    private hasSelfTransition(automaton: Automaton, state: State): boolean {
+/**
+ * @author Julien Aimonier-Davat
+ */
+export class PathsCompressionOptimizer {
+
+    private hasSelfTransition(automaton: Automaton<PropertyTransition>, state: State): boolean {
         for (let transition of automaton.findTransitionsFrom(state)) {
             if (transition.from.name === transition.to.name) {
                 return true
@@ -14,12 +19,14 @@ export class PathsContractionOptimizer {
         return false
     }
 
-    private buildPathsFrom(automaton: Automaton, state: State): Transition[] {
-        let paths = new Array<Transition>()
-        let stack = new Array<Transition>()
+    private buildPathsFrom(automaton: Automaton<PropertyTransition>, state: State): SequenceTransition[] {
+        let paths = new Array<SequenceTransition>()
+        let stack = new Array<SequenceTransition>()
         
         for (let transition of automaton.findTransitionsFrom(state)) {
-            stack.push(transition)
+            let multiPredicateTransition = new SequenceTransition(transition.from, transition.to)
+            multiPredicateTransition.instructions.push(transition.instruction)
+            stack.push(multiPredicateTransition)
         }
 
         while (stack.length > 0) {
@@ -29,8 +36,10 @@ export class PathsContractionOptimizer {
                 paths.push(transition)
             } else {
                 for (let nextTransition of automaton.findTransitionsFrom(transition.to)) {
+                    let multiPredicateTransition = new SequenceTransition(nextTransition.from, nextTransition.to)
+                    multiPredicateTransition.instructions.push(nextTransition.instruction)
                     let newTransition = cloneDeep(transition)
-                    newTransition.merge(nextTransition)
+                    newTransition.merge(multiPredicateTransition)
                     stack.push(newTransition)
                 }
             }           
@@ -39,8 +48,8 @@ export class PathsContractionOptimizer {
         return paths
     }
 
-    private buildPaths(automaton: Automaton): Transition[] {
-        let paths = new Array<Transition>()
+    private buildPaths(automaton: Automaton<PropertyTransition>): SequenceTransition[] {
+        let paths = new Array<SequenceTransition>()
 
         let visited = new Set<number>()
         let stack = new Array<State>()
@@ -51,7 +60,7 @@ export class PathsContractionOptimizer {
 
         while (stack.length > 0) {
             let currentState = stack.pop()!
-            let pathsFromCurrentState: Transition[] = this.buildPathsFrom(automaton, currentState)
+            let pathsFromCurrentState: SequenceTransition[] = this.buildPathsFrom(automaton, currentState)
             
             paths.push(...pathsFromCurrentState)
 
@@ -66,9 +75,9 @@ export class PathsContractionOptimizer {
         return paths
     }
 
-    public optimize(automaton: Automaton): Automaton {
+    public optimize(automaton: Automaton<PropertyTransition>): Automaton<SequenceTransition> {
         let paths = this.buildPaths(automaton)
-        let optimizedAutomaton = new Automaton()
+        let optimizedAutomaton = new Automaton<SequenceTransition>()
 
         for (let path of paths) {
             if (!optimizedAutomaton.findState(path.from.name)) {

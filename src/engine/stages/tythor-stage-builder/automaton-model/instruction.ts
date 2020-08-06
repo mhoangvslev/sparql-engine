@@ -1,3 +1,6 @@
+/**
+ * @author Julien Aimonier-Davat
+ */
 export class Instruction {
     private _properties: string[]
     private _inverse: boolean
