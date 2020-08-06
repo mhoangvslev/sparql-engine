@@ -52,6 +52,10 @@ export abstract class Transition {
 
     public abstract buildQuery(subject: string, object: string, joinPrefix?: string, filterPrefix?: string): Algebra.RootNode
 
+    public abstract supportStarQuery(): boolean
+
+    public abstract buildStarQuery(subject: string, object: string, depth: number, joinPrefix?: string, filterPrefix?: string): Algebra.RootNode
+
     public print(marginLeft: number): void {
         console.log(`${" ".repeat(marginLeft)}> Transition{
             from: ${this.from.name}, 

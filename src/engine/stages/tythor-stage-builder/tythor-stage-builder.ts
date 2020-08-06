@@ -9,6 +9,7 @@ import { AlternativeTransition } from "./automaton-model/alternative-transition"
 import { TyThorEngine } from "./tythor-engine/tythor-engine";
 import { StatesMergingOptimizer } from "./automaton-optimizer/states-merging";
 import { DistinctPathsOptimizer } from "./automaton-optimizer/distinct-paths";
+import { OptimizedTyThorEngine } from "./tythor-engine/tythor-engine-opt";
 
 /**
  * @author Julien Aimonier-Davat
@@ -16,7 +17,7 @@ import { DistinctPathsOptimizer } from "./automaton-optimizer/distinct-paths";
 export default class TythorStageBuilder extends PathStageBuilder {
     
     _executePropertyPath(subject: string, path: Algebra.PropertyPath, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
-        let tythorEngine: TyThorEngine = new TyThorEngine()
+        let tythorEngine: TyThorEngine = new OptimizedTyThorEngine()
         
         let forward = !rdf.isVariable(subject) || (rdf.isVariable(subject) && rdf.isVariable(obj))
         let automaton: Automaton<AlternativeTransition> = new PathsMergingOptimizer().optimize(

@@ -58,6 +58,45 @@ export class PropertyTransition extends Transition {
         return query
     }
 
+    public supportStarQuery(): boolean {
+        return true
+    }
+
+    public buildStarQuery(subject: string, object: string, depth: number, joinPrefix: string = 'tythorJoin', filterPrefix: string = 'tythorFilter'): Algebra.RootNode {
+        if (depth === 1) {
+            return this.buildQuery(subject, object, `joinPrefix_${depth}`, `filterPrefix_${depth}`)
+        }
+        let varIndex = 0
+        let bgp: Algebra.BGPNode = {
+            type: 'bgp',
+            triples: []
+        }
+        let group: Algebra.GroupNode = {
+            type: 'group',
+            patterns: []
+        }
+        let [triples, filters] = this.instructions2sparql(subject, `?tythorStarVar_${varIndex}`, `joinPrefix_${1}`, `filterPrefix_${1}`)
+        bgp.triples.push(...triples)
+        group.patterns.push(...filters)
+        for (let i = 2; i < depth; i++) {
+            [triples, filters] = this.instructions2sparql(`?tythorStarVar_${varIndex}`, `?tythorStarVar_${++varIndex}`, `joinPrefix_${i}`, `filterPrefix_${i}`)
+            bgp.triples.push(...triples)
+            group.patterns.push(...filters)
+        }
+        [triples, filters] = this.instructions2sparql(`?tythorStarVar_${varIndex}`, object, `joinPrefix_${depth}`, `filterPrefix_${depth}`)
+        bgp.triples.push(...triples)
+        group.patterns.push(...filters)
+        group.patterns.unshift(bgp)
+        let query: Algebra.RootNode = {
+            type: 'query',
+            queryType: 'SELECT',
+            prefixes: {},
+            variables: [subject, object].filter((variable) => rdf.isVariable(variable)),
+            where: [group]
+        }
+        return query
+    }
+
     public print(marginLeft: number): void {
         console.log(`${" ".repeat(marginLeft)}> Transition{
             from: ${this.from.name}, 
