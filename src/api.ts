@@ -31,7 +31,6 @@ import BGPStageBuilder from './engine/stages/bgp-stage-builder'
 import BindStageBuilder from './engine/stages/bind-stage-builder'
 import DistinctStageBuilder from './engine/stages/distinct-stage-builder'
 import FilterStageBuilder from './engine/stages/filter-stage-builder'
-import GlushkovStageBuilder from './engine/stages/glushkov-executor/glushkov-stage-builder'
 import GraphStageBuilder from './engine/stages/graph-stage-builder'
 import MinusStageBuilder from './engine/stages/minus-stage-builder'
 import ServiceStageBuilder from './engine/stages/service-stage-builder'
@@ -39,6 +38,7 @@ import OptionalStageBuilder from './engine/stages/optional-stage-builder'
 import OrderByStageBuilder from './engine/stages/orderby-stage-builder'
 import UnionStageBuilder from './engine/stages/union-stage-builder'
 import UpdateStageBuilder from './engine/stages/update-stage-builder'
+import TythorStageBuilder from './engine/stages/tythor-stage-builder/tythor-stage-builder'
 
 const stages = {
   SPARQL_OPERATION,
@@ -47,14 +47,14 @@ const stages = {
   BindStageBuilder,
   DistinctStageBuilder,
   FilterStageBuilder,
-  GlushkovStageBuilder,
   GraphStageBuilder,
   MinusStageBuilder,
   ServiceStageBuilder,
   OptionalStageBuilder,
   OrderByStageBuilder,
   UnionStageBuilder,
-  UpdateStageBuilder
+  UpdateStageBuilder,
+  TythorStageBuilder
 }
 
 // base types
