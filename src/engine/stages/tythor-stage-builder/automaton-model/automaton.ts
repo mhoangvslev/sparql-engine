@@ -1,6 +1,6 @@
 import { State } from "./state"
 import { Transition } from "./transition"
-
+import { ClosureTransition } from "./closure-transition"
 
 /**
  * @author Julien Aimonier-Davat
@@ -8,7 +8,7 @@ import { Transition } from "./transition"
 export class Automaton<T extends Transition> {
     
     private _states: Array<State>
-    private _transitions: Array<T>
+    private _transitions: Array<T | ClosureTransition<T>>
 
     constructor() {
         this._states = new Array<State>()
@@ -19,7 +19,7 @@ export class Automaton<T extends Transition> {
         return this._states
     }
 
-    get transitions(): Array<T> {
+    get transitions(): Array<T | ClosureTransition<T>> {
         return this._transitions
     }
 
@@ -39,19 +39,19 @@ export class Automaton<T extends Transition> {
         })
     }
 
-    public findTransitionsFrom(from: State): T[] {
-        return this.transitions.filter((transition: T) => {
+    public findTransitionsFrom(from: State): Array<T | ClosureTransition<T>> {
+        return this.transitions.filter((transition: T | ClosureTransition<T>) => {
             return transition.from.equals(from)
         })
     }
 
-    public findTransition(from: State, to: State): T | undefined {
-        return this.transitions.find((transition: T) => {
+    public findTransition(from: State, to: State): T | ClosureTransition<T> | undefined {
+        return this.transitions.find((transition: T | ClosureTransition<T>) => {
             return transition.from.equals(from) && transition.to.equals(to)
         })
     }
 
-    public addTransition(transition: T): void {
+    public addTransition(transition: T | ClosureTransition<T>): void {
         this.transitions.push(transition)
     }
 
@@ -66,19 +66,19 @@ export class Automaton<T extends Transition> {
         }
     }
 
-    public equals(other: Automaton<T>): boolean {
-        let sameStates: boolean = other.states.every((otherState: State) => {
-            return this.states.some((state: State) => {
-                return otherState.equals(state)
-            })
-        })
+    // public equals(other: Automaton<T>): boolean {
+    //     let sameStates: boolean = other.states.every((otherState: State) => {
+    //         return this.states.some((state: State) => {
+    //             return otherState.equals(state)
+    //         })
+    //     })
 
-        let sameTransitions: boolean = other.transitions.every((otherTransition: T) => {
-            return this.transitions.some((transition: T) => {
-                return otherTransition.equals(transition)
-            })
-        })
+    //     let sameTransitions: boolean = other.transitions.every((otherTransition: Transition) => {
+    //         return this.transitions.some((transition: Transition) => {
+    //             return otherTransition.equals(transition)
+    //         })
+    //     })
         
-        return sameStates && sameTransitions
-    }
+    //     return sameStates && sameTransitions
+    // }
 }

@@ -10,13 +10,15 @@ export class TythorContext {
     private _object: string
     private _visited: Map<string, Map<string, string>>
     private _stop: boolean
+    private _closure: boolean
     private _solution: number
     
-    constructor(subject: string, object: string) {
+    constructor(subject: string, object: string, closure: boolean = false) {
         this._subject = subject
         this._object = object
         this._visited = new Map<string, Map<string, string>>()
         this._stop = false
+        this._closure = closure
         this._solution = 0
     }
 
@@ -44,12 +46,14 @@ export class TythorContext {
     }
 
     public visit(subject:string, node: string) {
-        if (this._visited.has(subject)) {
-            this._visited.get(subject)!.set(node, node)
-        } else {
-            let visitedNodes = new Map<string, string>()
-            visitedNodes.set(node, node)
-            this._visited.set(subject, visitedNodes)
+        if (this._closure) {
+            if (this._visited.has(subject)) {
+                this._visited.get(subject)!.set(node, node)
+            } else {
+                let visitedNodes = new Map<string, string>()
+                visitedNodes.set(node, node)
+                this._visited.set(subject, visitedNodes)
+            }
         }
     }
 

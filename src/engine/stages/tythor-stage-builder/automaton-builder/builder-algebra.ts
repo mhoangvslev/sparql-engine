@@ -1,5 +1,6 @@
-import { Algebra } from "sparqljs";
-import { Automaton } from "../automaton-model/automaton";
+import { Algebra } from "sparqljs"
+import { Automaton } from "../automaton-model/automaton"
+import { PropertyTransition } from "../automaton-model/property-transition"
 
 declare module "sparqljs" {
     export namespace BuilderAlgebra {
@@ -19,12 +20,12 @@ declare module "sparqljs" {
             inverse: boolean
         }
 
-        // export interface Kleene extends Node {
-        //     automaton: Automaton
-        // }
+        export interface Closure extends Node {
+            automaton: Automaton<PropertyTransition>
+        }
 
         export interface PropertyPath extends Omit<Algebra.PropertyPath, 'items'>, Node {
-            items: Array<string | Property | PropertyPath /*| Kleene*/>
+            items: Array<string | Property | PropertyPath | Closure>
             pathType: string
         }
     }

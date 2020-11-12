@@ -18,6 +18,10 @@ export abstract class Transition {
         return this._from
     }
 
+    set from(state: State) {
+        this._from = state
+    }
+
     get to(): State {
         return this._to
     }
@@ -51,10 +55,6 @@ export abstract class Transition {
     }
 
     public abstract buildQuery(subject: string, object: string, joinPrefix?: string, filterPrefix?: string): Algebra.RootNode
-
-    public abstract supportStarQuery(): boolean
-
-    public abstract buildStarQuery(subject: string, object: string, depth: number, joinPrefix?: string, filterPrefix?: string): Algebra.RootNode
 
     public print(marginLeft: number): void {
         console.log(`${" ".repeat(marginLeft)}> Transition{

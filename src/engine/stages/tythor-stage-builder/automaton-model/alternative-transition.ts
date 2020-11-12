@@ -49,22 +49,6 @@ export class AlternativeTransition extends Transition {
         return query
     }
 
-    public buildStarQuery(subject: string, object: string, depth: number, joinPrefix: string = 'tythorJoin', filterPrefix: string = 'tythorFilter'): Algebra.RootNode {
-        if (depth === 1) {
-            return this.buildQuery(subject, object, joinPrefix, filterPrefix)
-        } else if (this.instructions.length === 1) {
-            let transition = new SequenceTransition(this.from, this.to)
-            transition.instructions.push(...this.instructions[0])
-            return transition.buildStarQuery(subject, object, depth, joinPrefix, filterPrefix)
-        } else {
-            throw new Error("Star queries are not supported with union of multi predicate transitions")
-        }
-    }
-
-    public supportStarQuery(): boolean {
-        return this.instructions.length === 1 // SaGe servers do not support joins of BGPs or Unions
-    }
-
     public print(marginLeft: number): void {
         console.log(`${" ".repeat(marginLeft)}> Transition{
             from: ${this.from.name}, 

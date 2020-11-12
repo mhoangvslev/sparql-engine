@@ -3,105 +3,77 @@ import { State } from '../automaton-model/state'
 import { SequenceTransition } from '../automaton-model/sequence-transition'
 import { Instruction } from '../automaton-model/instruction'
 import { cloneDeep } from 'lodash'
+import { PropertyTransition } from '../automaton-model/property-transition'
+import { isClosureTransition } from '../utils'
 
 /**
  * @author Julien Aimonier-Davat
  */
 export class StatesMergingOptimizer {
 
-    private compareInstructions(left: Instruction[], right: Instruction[]): boolean {
-        if (left.length !== right.length) {
+    private equivalentStates(stateA: number, stateB: number, neighboursA: Set<number>, neighboursB: Set<number>, automaton: Automaton<PropertyTransition>): boolean {
+        if (neighboursA.size !== neighboursB.size) {
             return false
-        }
-        for (let i = 0; i < left.length; i++) {
-            if (!left[i].equals(right[i])) {
-                return false
-            }
-        }
-        return true
-    }
-
-    private compareTransitions(left: SequenceTransition, right: SequenceTransition): boolean {
-        return left.to.name === right.to.name && this.compareInstructions(left.instructions, right.instructions)
-    }
-
-    private compareStates(automaton: Automaton<SequenceTransition>, left: State, right: State): boolean {
-        if (left.isInitial !== right.isInitial || left.isFinal !== right.isFinal) {
+        } else if (automaton.findState(stateA)!.isFinal !== automaton.findState(stateB)!.isFinal) {
             return false
-        }
-        for (let leftTransition of automaton.findTransitionsFrom(left)) {
-            let existsEquivalentRightTransition = false
-            for (let rightTransition of automaton.findTransitionsFrom(right)) {
-                if (this.compareTransitions(leftTransition, rightTransition)) {
-                    existsEquivalentRightTransition = true
-                    break
+        } else {
+            for (let next of neighboursA) {
+                if (!neighboursB.has(next)) {
+                    return false
                 }
             }
-            if (!existsEquivalentRightTransition) {
-                return false
-            }
+            return true
         }
-        return true
     }
 
-    private computeEquivalencies(automaton: Automaton<SequenceTransition>, equivalencies: Map<number, Array<number>>) {
-        let update = false
-        do {
-            update = false
-            for (let state1 of automaton.states) {
-                for (let state2 of automaton.states) {
-                    if (equivalencies.get(state1.name)!.includes(state2.name)) {
-                        continue
-                    }
-                    if (this.compareStates(automaton, state1, state2)) {
-                        equivalencies.get(state1.name)!.push(state2.name)
-                        equivalencies.get(state2.name)!.push(state1.name)
-                        update = true
-                    }
-                }
-            }
-        } while (update)        
-    }
-
-    public optimize(automaton: Automaton<SequenceTransition>): Automaton<SequenceTransition> {
-        let optimizedAutomaton = new Automaton<SequenceTransition>()
-
-        let equivalencies = new Map<number, Array<number>>()
+    public optimize(automaton: Automaton<PropertyTransition>): Automaton<PropertyTransition> {
+        
+        let states = new Map<number, number>()
+        let transitions = new Map<number, Set<number>>()
 
         for (let state of automaton.states) {
-            equivalencies.set(state.name, new Array<number>())
+            states.set(state.name, state.name)
+            transitions.set(state.name, new Set<number>())
         }
-
-        this.computeEquivalencies(automaton, equivalencies)
-
-        let agents = new Map<number, State>()
-        let state2agent = new Map<number, number>()
-
-        let agent = 0
-        for (let state of equivalencies.keys()) {
-            if (state2agent.get(state) === undefined) {
-                state2agent.set(state, agent)
-                for (let equivalentState of equivalencies.get(state)!) {
-                    state2agent.set(equivalentState, agent)  
+        for (let transtion of automaton.transitions) {
+            transitions.get(transtion.from.name)!.add(transtion.to.name)
+        }
+        
+        for (let [nodeA, neighboursA] of transitions) {
+            for (let [nodeB, neighboursB] of transitions) {
+                if (nodeA != nodeB && states.get(nodeA) !== states.get(nodeB) 
+                && this.equivalentStates(nodeA, nodeB, neighboursA, neighboursB, automaton)) {
+                    states.set(nodeB, nodeA)
+                    transitions.set(nodeB, new Set<number>())
                 }
-                let agentSate = new State(agent, automaton.findState(state)!.isInitial, automaton.findState(state)!.isFinal)
-                agents.set(agent, agentSate)
-                agent++
             }
-            
         }
 
-        for (let state of agents.values()) {
-            optimizedAutomaton.addState(state)
+        let optimizedAutomaton = new Automaton<PropertyTransition>()
+
+        for (let [oldId, newId] of states) {
+            if (!optimizedAutomaton.findState(newId)) {
+                optimizedAutomaton.addState(cloneDeep(automaton.findState(oldId)!))
+            }
         }
 
-        for (let transition of automaton.transitions) {
-            let from = agents.get(state2agent.get(transition.from.name)!)!
-            let to = agents.get(state2agent.get(transition.to.name)!)!
-            let instructions = cloneDeep(transition.instructions)
-            let newTransition = new SequenceTransition(from, to)
-            newTransition.instructions.push(...instructions)
-            optimizedAutomaton.addTransition(newTransition)
+        for (let [oldId, neighbours] of transitions) {
+            let newId = states.get(oldId)!
+            for (let neighbourOldId of neighbours) {
+                let neighbourNewId = states.get(neighbourOldId)!
+                let transition = cloneDeep(
+                    automaton.findTransition(
+                        automaton.findState(oldId)!, 
+                        automaton.findState(neighbourOldId)!
+                    )!
+                )
+                transition.from = optimizedAutomaton.findState(newId)!
+                transition.to = optimizedAutomaton.findState(neighbourNewId)!
+                if (isClosureTransition(transition)) {
+                    transition.automaton = this.optimize(transition.automaton)
+                }
+                optimizedAutomaton.addTransition(transition)
+            }
         }
 
         return optimizedAutomaton

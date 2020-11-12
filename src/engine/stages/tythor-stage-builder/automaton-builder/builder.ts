@@ -1,10 +1,13 @@
 import { BuilderAlgebra } from 'sparqljs'
-import { cloneDeep } from 'lodash'
+import { cloneDeep, intersection, difference } from 'lodash'
 import { Automaton } from '../automaton-model/automaton'
 import { State } from '../automaton-model/state'
-import { isNode, isPathNode, isPropertyNode/*, isTransitiveNode*/ } from '../utils'
+import { isNode, isPathNode, isPropertyNode,/*, isTransitiveNode*/ 
+isClosureNode} from '../utils'
 import { PropertyTransition } from '../automaton-model/property-transition'
 import { Instruction } from '../automaton-model/instruction'
+import { concatMap } from 'rxjs/operators'
+import { ClosureTransition } from '../automaton-model/closure-transition'
 
 function union(setA: Set<number>, setB: Set<number>): Set<number> {
     let union: Set<number> = new Set(setA);
@@ -13,7 +16,6 @@ function union(setA: Set<number>, setB: Set<number>): Set<number> {
     });
     return union;
 }
-
 
 /**
  * @author Julien Aimonier-Davat
@@ -26,10 +28,16 @@ class GlushkovAutomatonBuilder {
     constructor(syntaxTree: BuilderAlgebra.PropertyPath) {
         this.syntaxTree = syntaxTree
         this.properties = new Map<number, BuilderAlgebra.Node>()
-        this.visit(syntaxTree)
     }
 
     private visitProperty(node: BuilderAlgebra.Property) {
+        let nodeID: number = node.id!
+        node.first.add(nodeID)
+        node.last.add(nodeID)
+        this.properties.set(nodeID, node)
+    }
+
+    private visitClosure(node: BuilderAlgebra.Closure) {
         let nodeID: number = node.id!
         node.first.add(nodeID)
         node.last.add(nodeID)
@@ -148,6 +156,9 @@ class GlushkovAutomatonBuilder {
             case "path":
                 this.visitPath(node as BuilderAlgebra.PropertyPath)
                 break
+            case "closure":
+                this.visitClosure(node as BuilderAlgebra.Closure)
+                break
         }
     }
 
@@ -162,24 +173,31 @@ class GlushkovAutomatonBuilder {
         this.visitNode(node)
     }
 
-    public build(): Automaton<PropertyTransition> {
+    public build(nested: boolean = false): Automaton<PropertyTransition> {
+        // Creates the automaton
         let automaton = new Automaton<PropertyTransition>()
         let root = this.syntaxTree
+        
+        // Computes the metrics that will be used to build the automaton
+        this.properties.clear()
+        this.visit(root)
 
         // Creates and adds the initial state
-        let initialState = new State(root.id!, true, root.nullable)
+        let initialState = new State(0, true, root.nullable && !nested)
         automaton.addState(initialState)
 
         // Creates and adds the other states
-        for (let id of Array.from(this.properties.keys())) {
-            let isFinal = root.last.has(id)
-            automaton.addState(new State(id, false, isFinal))
+        for (let [_, node] of this.properties.entries()) {
+            if (!automaton.findState(node.id!)) {
+                let isFinal = root.last.has(node.id!)
+                automaton.addState(new State(node.id!, false, isFinal))
+            }   
         }
 
         // Adds the transitions that start from the initial state
-        for (let value of root.first) {
-            let toState: State = automaton.findState(value)!
+        for (let value of root.first) {            
             let toNode: BuilderAlgebra.Node = this.properties.get(value)!
+            let toState: State = automaton.findState(toNode.id!)!
             if (isPropertyNode(toNode)) {
                 let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
                 let transition = new PropertyTransition(initialState, toState, instruction)
@@ -193,12 +211,15 @@ class GlushkovAutomatonBuilder {
         for (let from of Array.from(this.properties.keys())) {
             let fromNode: BuilderAlgebra.Node = this.properties.get(from)!
             for (let to of fromNode.follow) {
-                let fromState: State = automaton.findState(from)!
-                let toState: State = automaton.findState(to)!
+                let fromState: State = automaton.findState(fromNode.id!)!
                 let toNode: BuilderAlgebra.Node = this.properties.get(to)!
+                let toState: State = automaton.findState(toNode.id!)!
                 if (isPropertyNode(toNode)) {
                     let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
                     let transition = new PropertyTransition(fromState, toState, instruction)
+                    automaton.addTransition(transition)
+                } else if (isClosureNode(toNode)) {
+                    let transition = new ClosureTransition(fromState, toState, toNode.automaton)
                     automaton.addTransition(transition)
                 } else {
                     throw new Error(`Unknown node encountered during automaton construction`)
@@ -225,11 +246,11 @@ export class AutomatonBuilder {
         }
     }
 
-    private addNodeIdentifier(node: BuilderAlgebra.Node, counter: number = 1): number {
+    private addNodesIdentifiers(node: BuilderAlgebra.Node, counter: number = 1): number {
         if (isPathNode(node)) {
             for (let child of node.items) {
                 if (isNode(child)) {
-                    counter = this.addNodeIdentifier(child, counter)
+                    counter = this.addNodesIdentifiers(child, counter)
                 }
             }
         }
@@ -243,11 +264,10 @@ export class AutomatonBuilder {
         node.follow = new Set<number>()
         node.nullable = false
         if (isPathNode(node)) {
-            for (let itemIndex = 0; itemIndex < node.items.length; itemIndex++) {
-                let child = node.items[itemIndex]
+            for (let [index, child] of node.items.entries()) {
                 if (typeof child === "string") {
                     let property: BuilderAlgebra.Property = {
-                        items: [node.items[itemIndex] as string],
+                        items: [child],
                         negation: false,
                         inverse: false,
                         nullable: false,
@@ -256,7 +276,7 @@ export class AutomatonBuilder {
                         follow: new Set<number>(),
                         type: "property"
                     }
-                    node.items[itemIndex] = property
+                    node.items[index] = property
                 } else {
                     this.initializeTree(child)
                 }
@@ -359,7 +379,7 @@ export class AutomatonBuilder {
         switch (node.type) {
             case "path":
                 let path = node as BuilderAlgebra.PropertyPath
-                console.log(`${" ".repeat(depth)} > Non-transitive Path{id: ${path.id}, pathType: ${path.pathType}}`)
+                console.log(`${" ".repeat(depth)} > Path{id: ${path.id}, pathType: ${path.pathType}}`)
                 for(let i = 0; i < path.items.length; i++) {
                     this.printTree(path.items[i], depth + 3)
                 }
@@ -373,11 +393,58 @@ export class AutomatonBuilder {
                     nullable: ${property.nullable},
                     first: ${property.first},
                     last: ${property.last},
-                    folow: ${property.follow}}`)
+                    follow: ${property.follow}}`)
+                break
+            case "closure":
+                let closure = node as BuilderAlgebra.Closure
+                console.log(`${" ".repeat(depth)} > Closure{id: ${closure.id}, 
+                    nullable: ${closure.nullable},
+                    first: ${closure.first},
+                    last: ${closure.last},
+                    follow: ${closure.follow}}`)
                 break
             default:
-                break;
+                break
         }
+    }
+
+    private buildNestedAutomaton(node: BuilderAlgebra.Node) {
+        if (isPathNode(node)) {
+            for (let [index, child] of node.items.entries()) {
+                if (isNode(child)) {
+                    this.buildNestedAutomaton(child)
+                }
+                if (isPathNode(child) && ['*', '+', '?'].includes(child.pathType)) {
+                    this.addNodesIdentifiers(child)
+                    let automaton = new GlushkovAutomatonBuilder(child).build(true)
+                    let closure: BuilderAlgebra.Closure = {
+                        automaton: automaton,
+                        first: new Set<number>(),
+                        last: new Set<number>(),
+                        follow: new Set<number>(),
+                        type: 'closure',
+                        nullable: child.pathType == '*' || child.pathType == '?'
+                    }
+                    node.items[index] = closure
+                }
+            }
+        }
+    }
+
+    private buildAutomaton(node: BuilderAlgebra.PropertyPath) {
+        this.buildNestedAutomaton(node)
+        this.addNodesIdentifiers(node)
+        if (isPathNode(node) && ['*', '+', '?'].includes(node.pathType)) {
+            let baseAutomaton = new Automaton<PropertyTransition>()
+            let initialState = new State(0, true, ['*', '?'].includes(node.pathType))
+            let finalState = new State(1, false, true)
+            let closureAutomaton = new GlushkovAutomatonBuilder(node).build(true)
+            baseAutomaton.addState(initialState)
+            baseAutomaton.addState(finalState)
+            baseAutomaton.addTransition(new ClosureTransition(initialState, finalState, closureAutomaton))
+            return baseAutomaton
+        }
+        return new GlushkovAutomatonBuilder(node).build()
     }
 
     public build(propertyPath: BuilderAlgebra.PropertyPath, forward: boolean): Automaton<PropertyTransition> {
@@ -389,7 +456,6 @@ export class AutomatonBuilder {
         }
         this.pushDownInverses(syntaxTree)
         this.rewriteNegations(syntaxTree)
-        this.addNodeIdentifier(syntaxTree)
-        return new GlushkovAutomatonBuilder(syntaxTree).build()
+        return this.buildAutomaton(syntaxTree)
     }
 }
