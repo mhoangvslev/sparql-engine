@@ -25,7 +25,7 @@ SOFTWARE.
 'use strict'
 
 // General libraries
-import { Algebra, Parser } from 'sparqljs'
+import { Algebra, Parser, Generator } from 'sparqljs'
 import { Consumable } from '../operators/update/consumer'
 // pipelining engine
 import { Pipeline } from '../engine/pipeline/pipeline'
@@ -54,6 +54,7 @@ import OptionalStageBuilder from './stages/optional-stage-builder'
 import OrderByStageBuilder from './stages/orderby-stage-builder'
 import UnionStageBuilder from './stages/union-stage-builder'
 import UpdateStageBuilder from './stages/update-stage-builder'
+import AlphaStageBuilder from './stages/alpha-stage-builder'
 // caching
 import { BGPCache, LRUBGPCache } from './cache/bgp-cache'
 // utilities
@@ -63,14 +64,15 @@ import {
   isString,
   isUndefined,
   some,
-  sortBy
+  sortBy,
+  intersection
 } from 'lodash'
 
 import ExecutionContext from './context/execution-context'
 import ContextSymbols from './context/symbols'
 import { CustomFunctions } from '../operators/expressions/sparql-expression'
 import { extractPropertyPaths } from './stages/rewritings'
-import { extendByBindings, deepApplyBindings, rdf } from '../utils'
+import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables } from '../utils'
 
 const QUERY_MODIFIERS = {
   SELECT: select,
@@ -123,7 +125,7 @@ export class PlanBuilder {
    * @param dataset - RDF Dataset used for query execution
    * @param prefixes - Optional prefixes to use during query processing
    */
-  constructor (dataset: Dataset, prefixes: any = {}, customFunctions?: CustomFunctions) {
+  constructor (dataset: Dataset, prefixes: any = {}, options: any = {}, customFunctions?: CustomFunctions) {
     this._dataset = dataset
     this._parser = new Parser(prefixes)
     this._optimizer = Optimizer.getDefault()
@@ -142,9 +144,13 @@ export class PlanBuilder {
     this.use(SPARQL_OPERATION.SERVICE, new ServiceStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.OPTIONAL, new OptionalStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.ORDER_BY, new OrderByStageBuilder(this._dataset))
-    this.use(SPARQL_OPERATION.PROPERTY_PATH, new TythorStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UNION, new UnionStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UPDATE, new UpdateStageBuilder(this._dataset))
+    if (options['property-paths-strategy'] === 'alpha-operator') {
+      this.use(SPARQL_OPERATION.PROPERTY_PATH, new AlphaStageBuilder(this._dataset, options))
+    } else {
+      this.use(SPARQL_OPERATION.PROPERTY_PATH, new TythorStageBuilder(this._dataset, options))
+    }
   }
 
   /**
@@ -207,8 +213,10 @@ export class PlanBuilder {
     }
 
     // Optimize the logical query execution plan
-    // console.log(JSON.stringify(query, null, 2))
+    // console.log(new Generator().stringify(query))
+    // console.log(JSON.stringify(query))
     query = this._optimizer.optimize(query)
+    // console.log(new Generator().stringify(query))
     // console.log(JSON.stringify(query))
 
     // build physical query execution plan, depending on the query type
@@ -401,28 +409,77 @@ export class PlanBuilder {
 
     switch (group.type) {
       case 'bgp':
-        if (!this._stageBuilders.has(SPARQL_OPERATION.BGP)) {
-          throw new Error('A PlanBuilder cannot evaluate a Basic Graph Pattern without a Stage Builder for it')
-        }
-        // find possible Property paths
-        let [classicTriples, pathTriples, tempVariables] = extractPropertyPaths(group as Algebra.BGPNode)
-        if (pathTriples.length > 0) {
-          if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
-            throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
+        // gather metadata about triple patterns
+        let triples = []
+        for (let triple of (group as Algebra.BGPNode).triples) {
+          let selectivity = 0
+          if (typeof triple.predicate === "string") {
+            if (triple.subject.startsWith('?')) {
+              selectivity += 1
+            }
+            if (triple.predicate.startsWith('?')) {
+              selectivity += 1
+            }
+            if (triple.object.startsWith('?')) {
+              selectivity += 1
+            }
+          } else if (triple.subject.startsWith('?') && triple.object.startsWith('?')) {
+            selectivity = Infinity
           }
-          source = this._stageBuilders.get(SPARQL_OPERATION.PROPERTY_PATH)!.execute(source, pathTriples, context) as PipelineStage<Bindings>
-        }
-
-        // delegate remaining BGP evaluation to the dedicated executor
-        let iter = this._stageBuilders.get(SPARQL_OPERATION.BGP)!.execute(source, classicTriples, childContext) as PipelineStage<Bindings>
-
-        // filter out variables added by the rewriting of property paths
-        if (tempVariables.length > 0) {
-          iter = engine.map(iter, bindings => {
-            return bindings.filter(v => tempVariables.indexOf(v) === -1)
+          triples.push({
+            triple: triple,
+            selectivity: selectivity
           })
         }
-        return iter
+        // sort triples by ascending selectivity
+        triples = triples.sort((a, b) => a.selectivity - b.selectivity).map((pattern) => pattern.triple)
+        // evaluate patterns using the appropriate stage builder
+        let bucket = []
+        let variables = []
+        let triple = triples.shift()
+        bucket.push(triple!)
+        variables.push(...getVariables(triple!))
+        let is_path_bucket = typeof triple!.predicate !== "string"
+        while (triples.length > 0) {
+          let position = findConnectedPattern(variables, triples)
+          if (position < 0) {
+            position = 0  
+          }
+          triple = triples[position]
+          triples.splice(position, 1)
+          variables.push(...getVariables(triple!))
+          if (is_path_bucket === (typeof triple!.predicate !== "string")) {
+            bucket.push(triple)
+          } else {
+            if (is_path_bucket) {
+              if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
+                throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
+              }
+              source = this._stageBuilders.get(SPARQL_OPERATION.PROPERTY_PATH)!.execute(source, bucket, context) as PipelineStage<Bindings>
+            } else {
+              if (!this._stageBuilders.has(SPARQL_OPERATION.BGP)) {
+                throw new Error('A PlanBuilder cannot evaluate a Basic Graph Pattern without a Stage Builder for it')
+              }
+              source = this._stageBuilders.get(SPARQL_OPERATION.BGP)!.execute(source, bucket, context) as PipelineStage<Bindings>
+            }
+            bucket = [triple]
+            is_path_bucket = !is_path_bucket
+          }
+        }
+        if (bucket.length > 0) {
+          if (is_path_bucket) {
+            if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
+              throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
+            }
+            source = this._stageBuilders.get(SPARQL_OPERATION.PROPERTY_PATH)!.execute(source, bucket, context) as PipelineStage<Bindings>
+          } else {
+            if (!this._stageBuilders.has(SPARQL_OPERATION.BGP)) {
+              throw new Error('A PlanBuilder cannot evaluate a Basic Graph Pattern without a Stage Builder for it')
+            }
+            source = this._stageBuilders.get(SPARQL_OPERATION.BGP)!.execute(source, bucket, context) as PipelineStage<Bindings>
+          }
+        }
+        return source
       case 'query':
         return this._buildQueryPlan(group as Algebra.RootNode, childContext, source)
       case 'graph':

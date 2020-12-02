@@ -8,6 +8,7 @@ import { PathsMergingOptimizer } from "./automaton-optimizer/paths-merging";
 import { AlternativeTransition } from "./automaton-model/alternative-transition";
 import { TyThorEngine } from "./tythor-engine/tythor-engine";
 import { StatesMergingOptimizer } from "./automaton-optimizer/states-merging";
+import { Transition } from "./automaton-model/transition";
 
 /**
  * @author Julien Aimonier-Davat
@@ -19,30 +20,26 @@ export default class TythorStageBuilder extends PathStageBuilder {
         
         let forward = !rdf.isVariable(subject) || (rdf.isVariable(subject) && rdf.isVariable(obj))
         
-        // --- multi-predicate automaton
-        
-        let automaton = new PathsMergingOptimizer().optimize(
-            new PathsCompressionOptimizer().optimize(
-                new StatesMergingOptimizer().optimize(
-                    new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+        let automaton: Automaton<Transition>
+        if (this._options['property-paths-strategy'] == 'multi-predicate-automaton') {
+            automaton = new PathsMergingOptimizer().optimize(
+                new PathsCompressionOptimizer().optimize(
+                    new StatesMergingOptimizer().optimize(
+                        new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+                    )
                 )
             )
-        )
-
-        // --- mono-predicate automaton
-
-        // let automaton = new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
-
-        // return Pipeline.getInstance().empty<Algebra.TripleObject>()
-        // let automaton: Automaton<AlternativeTransition> = new PathsMergingOptimizer().optimize(
-        //     new DistinctPathsOptimizer().optimize(
-        //         new StatesMergingOptimizer().optimize(
-        //             new PathsCompressionOptimizer().optimize(
-        //                 new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
-        //             )
-        //         )
-        //     )
-        // )
+        } else if (this._options['property-paths-strategy'] == 'mono-predicate-automaton') {
+            automaton = new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+        } else {
+            automaton = new PathsMergingOptimizer().optimize(
+                new PathsCompressionOptimizer().optimize(
+                    new StatesMergingOptimizer().optimize(
+                        new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+                    )
+                )
+            )
+        }
 
         let engine = Pipeline.getInstance()
         let solutions = tythorEngine.evalPropertyPaths(forward ? subject : obj, automaton, forward ? obj : subject, graph, context)

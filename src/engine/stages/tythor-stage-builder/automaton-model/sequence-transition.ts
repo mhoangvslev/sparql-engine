@@ -87,15 +87,15 @@ export class SequenceTransition extends Transition {
     public equals(other: SequenceTransition): boolean {
         if (!this.from.equals(other.from) || !this.to.equals(other.to)) {
             return false
-        }
-        if (this.instructions.length !== other.instructions.length) {
+        } else if (this.instructions.length !== other.instructions.length) {
             return false
-        }
-        for (let i = 0; i < this.instructions.length; i++) {
-            if (!this.instructions[i].equals(other.instructions[i])) {
-                return false
+        } else {
+            for (let i = 0; i < this.instructions.length; i++) {
+                if (!this.instructions[i].equals(other.instructions[i])) {
+                    return false
+                }
             }
+            return true
         }
-        return true
     }
 }

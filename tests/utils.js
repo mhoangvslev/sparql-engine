@@ -137,7 +137,7 @@ class TestEngine {
     this._graph = graph
     this._defaultGraphIRI = (defaultGraphIRI === null) ? this._graph.iri : defaultGraphIRI
     this._dataset = new HashMapDataset(this._defaultGraphIRI, this._graph)
-    this._builder = new PlanBuilder(this._dataset, {}, customOperations)
+    this._builder = new PlanBuilder(this._dataset, {}, {}, customOperations)
   }
 
   defaultGraphIRI() {

@@ -5,7 +5,7 @@ import { Automaton } from "../automaton-model/automaton"
 import { TythorContext } from "./tythor-context"
 import { TythorState } from "./tythor-state"
 import { ClosureTransition } from "../automaton-model/closure-transition"
-import { isClosureTransition, isClosureNode } from "../utils"
+import { isClosureTransition } from "../utils"
 
 /**
  * @author Julien Aimonier-Davat
@@ -14,6 +14,12 @@ import { isClosureTransition, isClosureNode } from "../utils"
  * have been rewritten during the optimization of the query plan.
  */
 export class TyThorEngine {
+
+    private _maxDepth: number|undefined
+
+    constructor(maxDepth?: number) {
+        this._maxDepth = maxDepth
+    }
 
     protected reflexiveClosure(subject: string, object: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
         let engine = Pipeline.getInstance()
@@ -59,42 +65,37 @@ export class TyThorEngine {
     protected evalTransition(searchState: TythorState, transition: Transition | ClosureTransition<Transition>, graph: Graph, context: ExecutionContext): PipelineStage<TythorState> {
         let engine: PipelineEngine = Pipeline.getInstance()
         if (isClosureTransition(transition)) {
-            let ppContext = new TythorContext(searchState.object, '?o', true)
-            let nestedSearchState = new TythorState(searchState.object, searchState.object, transition.automaton.findInitialStates()[0])
-            return engine.map(this.computeNextStep(nestedSearchState, transition.automaton, graph, ppContext, context), (solution: TythorState) => {
-                return new TythorState(searchState.subject, solution.object, transition.to)
+            let ppContext = new TythorContext(searchState.object, '?tythorObject', true)
+            let nestedSearchState = new TythorState(searchState.object, searchState.object, transition.automaton.findInitialStates()[0], searchState.depth)
+            return engine.map(this.evalNext(nestedSearchState, transition.automaton, graph, ppContext, context), (solution: TythorState) => {
+                return new TythorState(searchState.subject, solution.object, transition.to, searchState.depth + solution.depth)
             })
         } else {
             let query = transition.buildQuery(searchState.object, '?tythorObject')
             return engine.map(graph.evalQuery(query, context), (solution: Bindings) => {
-                return new TythorState(searchState.subject, solution.get('?tythorObject')!, transition.to)
+                return new TythorState(searchState.subject, solution.get('?tythorObject')!, transition.to, searchState.depth + 1)
             })
         }   
     }
 
-    protected computeNextStep(searchState: TythorState, automaton: Automaton<Transition>, graph: Graph, ppContext: TythorContext, context: ExecutionContext): PipelineStage<TythorState> {
+    protected evalNext(searchState: TythorState, automaton: Automaton<Transition>, graph: Graph, ppContext: TythorContext, context: ExecutionContext): PipelineStage<TythorState> {
         let engine: PipelineEngine = Pipeline.getInstance()
 
-        if (ppContext.stop) {
+        if (ppContext.stop || ppContext.visited(searchState) || (this._maxDepth && searchState.depth > this._maxDepth)) {
             return engine.empty<TythorState>()
         }
 
         let newSolution = engine.empty<TythorState>()
         if (searchState.state.isFinal) {
-            if (!ppContext.visited(searchState.subject, searchState.object) && ppContext.isSolution(searchState.subject, searchState.object)) {
+            ppContext.mark_as_visited(searchState)
+            if (ppContext.isSolution(searchState)) {
                 newSolution = engine.of(searchState)
-            }
-
-            if (ppContext.visited(searchState.subject, searchState.object)) {
-                return engine.empty<TythorState>()
-            } else {
-                ppContext.visit(searchState.subject, searchState.object)
             }
         }
 
         let nextSolutions = engine.mergeMap(engine.from(automaton.findTransitionsFrom(searchState.state)), (transition: Transition | ClosureTransition<Transition>) => {
             return engine.mergeMap(this.evalTransition(searchState, transition, graph, context), (result: TythorState) => {
-                return this.computeNextStep(result, automaton, graph, ppContext, context)
+                return this.evalNext(result, automaton, graph, ppContext, context)
             })
         })
 
@@ -117,26 +118,26 @@ export class TyThorEngine {
         })
     }
 
-    protected computeFirstStep(subject: string, automaton: Automaton<Transition>, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<TythorState> {
+    protected eval(subject: string, automaton: Automaton<Transition>, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<TythorState> {
         let engine = Pipeline.getInstance()
         let initialState = automaton.findInitialStates()[0]
         if (rdf.isVariable(subject)) {
             return engine.mergeMap(engine.distinct(this.findCandidates(automaton, graph, context)), (candidate: string) => {
                 let ppContext: TythorContext = new TythorContext(candidate, obj)
-                let searchState = new TythorState(candidate, candidate, initialState)
-                return this.computeNextStep(searchState, automaton, graph, ppContext, context)
+                let searchState = new TythorState(candidate, candidate, initialState, 0)
+                return this.evalNext(searchState, automaton, graph, ppContext, context)
             })
         } else {
             let ppContext: TythorContext = new TythorContext(subject, obj)
-            let searchState = new TythorState(subject, subject, initialState)
-            return this.computeNextStep(searchState, automaton, graph, ppContext, context)
+            let searchState = new TythorState(subject, subject, initialState, 0)
+            return this.evalNext(searchState, automaton, graph, ppContext, context)
         }
     }
 
     public evalPropertyPaths(subject: string, automaton: Automaton<Transition>, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
         let engine = Pipeline.getInstance()
         let initialState = automaton.findInitialStates()[0]
-        let solutions = engine.map(engine.filter(this.computeFirstStep(subject, automaton, obj, graph, context), (solution: TythorState) => {
+        let solutions = engine.map(engine.filter(this.eval(subject, automaton, obj, graph, context), (solution: TythorState) => {
             return !initialState.isFinal || solution.subject !== solution.object
         }), (solution: TythorState) => {
             return {

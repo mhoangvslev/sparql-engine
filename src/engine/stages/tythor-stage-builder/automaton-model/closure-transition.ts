@@ -39,7 +39,7 @@ export class ClosureTransition<T extends Transition> extends Transition {
         console.log(`${" ".repeat(marginLeft)}\n}`)
     }
 
-    // public equals(other: ClosureTransition<T>): boolean {
-    //     return super.equals(other) && this.automaton.equals(other.automaton)
-    // }
+    public equals(other: ClosureTransition<T>): boolean {
+        return super.equals(other) && this.automaton.equals(other.automaton)
+    }
 }

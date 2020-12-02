@@ -27,12 +27,15 @@ export class Instruction {
     public equals(other: Instruction): boolean {
         if (this.negation !== other.negation || this.inverse !== other.inverse) {
             return false
-        }
-        for (let property of other.properties) {
-            if (!this.properties.includes(property)) {
-                return false
+        } else if (this.properties.length !== other.properties.length) {
+            return false
+        } else {
+            for (let property of this.properties) {
+                if (!other.properties.includes(property)) {
+                    return false
+                }
             }
+            return true
         }
-        return true
     }
 }

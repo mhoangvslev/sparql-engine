@@ -1,12 +1,10 @@
 import { BuilderAlgebra } from 'sparqljs'
-import { cloneDeep, intersection, difference } from 'lodash'
+import { cloneDeep } from 'lodash'
 import { Automaton } from '../automaton-model/automaton'
 import { State } from '../automaton-model/state'
-import { isNode, isPathNode, isPropertyNode,/*, isTransitiveNode*/ 
-isClosureNode} from '../utils'
+import { isNode, isPathNode, isPropertyNode, isClosureNode } from '../utils'
 import { PropertyTransition } from '../automaton-model/property-transition'
 import { Instruction } from '../automaton-model/instruction'
-import { concatMap } from 'rxjs/operators'
 import { ClosureTransition } from '../automaton-model/closure-transition'
 
 function union(setA: Set<number>, setB: Set<number>): Set<number> {

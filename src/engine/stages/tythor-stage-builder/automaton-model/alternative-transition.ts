@@ -60,14 +60,21 @@ export class AlternativeTransition extends Transition {
     public equals(other: AlternativeTransition): boolean {
         if (!this.from.equals(other.from) || !this.to.equals(other.to)) {
             return false
-        }
-        for (let i = 0; i < this.instructions.length; i++) {
-            for (let j = 0; j < this.instructions[i].length; j++) {
-                if (!this.instructions[i][j].equals(other.instructions[i][j])) {
+        } else if (this.instructions.length !== other.instructions.length) {
+            return false
+        } else {
+            for (let i = 0; i < this.instructions.length; i++) {
+                if (this.instructions[i].length !== other.instructions[i].length) {
                     return false
+                } else {
+                    for (let j = 0; j < this.instructions[i].length; j++) {
+                        if (!this.instructions[i][j].equals(other.instructions[i][j])) {
+                            return false
+                        }
+                    }
                 }
             }
+            return true
         }
-        return true
     }
 }

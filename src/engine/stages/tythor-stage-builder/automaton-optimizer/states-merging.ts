@@ -11,7 +11,7 @@ import { isClosureTransition } from '../utils'
  */
 export class StatesMergingOptimizer {
 
-    private equivalentStates(stateA: number, stateB: number, neighboursA: Set<number>, neighboursB: Set<number>, automaton: Automaton<PropertyTransition>): boolean {
+    private areEquivalentStates(stateA: number, stateB: number, neighboursA: Set<number>, neighboursB: Set<number>, automaton: Automaton<PropertyTransition>): boolean {
         if (neighboursA.size !== neighboursB.size) {
             return false
         } else if (automaton.findState(stateA)!.isFinal !== automaton.findState(stateB)!.isFinal) {
@@ -40,13 +40,22 @@ export class StatesMergingOptimizer {
         }
         
         for (let [nodeA, neighboursA] of transitions) {
+            let equivalentStates = []
             for (let [nodeB, neighboursB] of transitions) {
                 if (nodeA != nodeB && states.get(nodeA) !== states.get(nodeB) 
-                && this.equivalentStates(nodeA, nodeB, neighboursA, neighboursB, automaton)) {
-                    states.set(nodeB, nodeA)
-                    transitions.set(nodeB, new Set<number>())
+                && this.areEquivalentStates(nodeA, nodeB, neighboursA, neighboursB, automaton)) {
+                    equivalentStates.push(nodeB)  
                 }
             }
+            let max = nodeA
+            for (let state of equivalentStates) {
+                max = state > max ? state : max
+            }
+            for (let state of equivalentStates) {
+                states.set(state, max)
+                transitions.set(state, new Set<number>())
+            }
+            states.set(nodeA, max)
         }
 
         let optimizedAutomaton = new Automaton<PropertyTransition>()

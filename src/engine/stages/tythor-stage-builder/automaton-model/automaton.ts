@@ -66,19 +66,19 @@ export class Automaton<T extends Transition> {
         }
     }
 
-    // public equals(other: Automaton<T>): boolean {
-    //     let sameStates: boolean = other.states.every((otherState: State) => {
-    //         return this.states.some((state: State) => {
-    //             return otherState.equals(state)
-    //         })
-    //     })
+    public equals(other: Automaton<T>): boolean {
+        let sameStates: boolean = other.states.every((otherState: State) => {
+            return this.states.some((state: State) => {
+                return otherState.equals(state)
+            })
+        })
 
-    //     let sameTransitions: boolean = other.transitions.every((otherTransition: Transition) => {
-    //         return this.transitions.some((transition: Transition) => {
-    //             return otherTransition.equals(transition)
-    //         })
-    //     })
+        let sameTransitions: boolean = other.transitions.every((otherTransition: Transition) => {
+            return this.transitions.some((transition: Transition) => {
+                return otherTransition.equals(transition)
+            })
+        })
         
-    //     return sameStates && sameTransitions
-    // }
+        return sameStates && sameTransitions
+    }
 }
