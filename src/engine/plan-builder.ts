@@ -42,7 +42,7 @@ import select from '../operators/modifiers/select'
 // Stage builders
 import StageBuilder from './stages/stage-builder'
 import AggregateStageBuilder from './stages/aggregate-stage-builder'
-import BGPStageBuilder from './stages/bgp-stage-builder'
+import BGPStageBuilder from './stages/ppaths-bgp-stage-builder'
 import BindStageBuilder from './stages/bind-stage-builder'
 import DistinctStageBuilder from './stages/distinct-stage-builder'
 import FilterStageBuilder from './stages/filter-stage-builder'
@@ -72,7 +72,7 @@ import ExecutionContext from './context/execution-context'
 import ContextSymbols from './context/symbols'
 import { CustomFunctions } from '../operators/expressions/sparql-expression'
 import { extractPropertyPaths } from './stages/rewritings'
-import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables } from '../utils'
+import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables, isTransitiveClosure } from '../utils'
 
 const QUERY_MODIFIERS = {
   SELECT: select,
@@ -213,11 +213,11 @@ export class PlanBuilder {
     }
 
     // Optimize the logical query execution plan
-    // console.log(new Generator().stringify(query))
-    // console.log(JSON.stringify(query))
+    console.log(new Generator().stringify(query))
+    console.log(JSON.stringify(query))
     query = this._optimizer.optimize(query)
-    // console.log(new Generator().stringify(query))
-    // console.log(JSON.stringify(query))
+    console.log(new Generator().stringify(query))
+    console.log(JSON.stringify(query))
 
     // build physical query execution plan, depending on the query type
     switch (query.type) {
@@ -424,13 +424,18 @@ export class PlanBuilder {
               selectivity += 1
             }
           } else if (triple.subject.startsWith('?') && triple.object.startsWith('?')) {
-            selectivity = Infinity
+            if (isTransitiveClosure(triple.predicate)) {
+              selectivity = 5
+            } else {
+              selectivity = 4
+            }
           }
           triples.push({
             triple: triple,
             selectivity: selectivity
           })
         }
+        console.log(triples)
         // sort triples by ascending selectivity
         triples = triples.sort((a, b) => a.selectivity - b.selectivity).map((pattern) => pattern.triple)
         // evaluate patterns using the appropriate stage builder
@@ -439,7 +444,7 @@ export class PlanBuilder {
         let triple = triples.shift()
         bucket.push(triple!)
         variables.push(...getVariables(triple!))
-        let is_path_bucket = typeof triple!.predicate !== "string"
+        let is_path_bucket = (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))
         while (triples.length > 0) {
           let position = findConnectedPattern(variables, triples)
           if (position < 0) {
@@ -448,9 +453,10 @@ export class PlanBuilder {
           triple = triples[position]
           triples.splice(position, 1)
           variables.push(...getVariables(triple!))
-          if (is_path_bucket === (typeof triple!.predicate !== "string")) {
+          if (is_path_bucket === (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))) {
             bucket.push(triple)
           } else {
+            console.log(bucket)
             if (is_path_bucket) {
               if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
                 throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
@@ -467,6 +473,7 @@ export class PlanBuilder {
           }
         }
         if (bucket.length > 0) {
+          console.log(bucket)
           if (is_path_bucket) {
             if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
               throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')

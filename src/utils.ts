@@ -379,7 +379,7 @@ export namespace rdf {
    * @param  str - String to test
    * @return True if the string is a SPARQL variable, False otherwise
    */
-  export function isVariable (str: string): boolean {
+  export function isVariable (str: string|Algebra.PropertyPath): str is string {
     if (typeof str !== 'string') {
       return false
     }
@@ -682,4 +682,8 @@ export function findConnectedPattern(variables: Array<string>, triples: Array<Al
     }
   }
   return -1
+}
+
+export function isTransitiveClosure(path: Algebra.PropertyPath): boolean {
+  return ['*','+','?'].includes(path.pathType)
 }

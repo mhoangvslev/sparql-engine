@@ -27,6 +27,7 @@ SOFTWARE.
 import PlanVisitor from '../plan-visitor'
 import { Algebra } from 'sparqljs'
 import { cloneDeep } from 'lodash'
+import { isTransitiveClosure } from '../../utils'
 
 /**
  * Implements a simple Property Path rewriting: non-transitive expression are extracted and injected in the BGP
@@ -177,6 +178,18 @@ export default class RewritePropertyPaths extends PlanVisitor {
         }
     }
 
+    private containsTransitiveClosure(path: Algebra.PropertyPath): boolean {
+        if (isTransitiveClosure(path)) {
+            return true
+        }
+        for (let item of path.items) {
+            if (typeof item !== "string" && this.containsTransitiveClosure(item)) {
+                return true
+            }
+        }
+        return false
+    }
+
     /**
      * Visit and transform a Basic Graph Pattern node.
      * Non-transitive expressions of Property Path patterns are rewritten.
@@ -187,9 +200,11 @@ export default class RewritePropertyPaths extends PlanVisitor {
         let newNode = cloneDeep(node)
         for (let i = 0; i < newNode.triples.length; i++) {
             let triple: Algebra.TripleObject|Algebra.PathTripleObject = newNode.triples[i]
-            if (this.isPathTriple(triple) && !['*','+','?'].includes(triple.predicate.pathType)) {
-                newNode.triples.splice(i, 1)
-                return this.rewriteBgpWithPropertyPaths(newNode.triples, triple)
+            if (this.isPathTriple(triple)) {
+                if (!isTransitiveClosure(triple.predicate) && this.containsTransitiveClosure(triple.predicate)) {
+                    newNode.triples.splice(i, 1)
+                    return this.rewriteBgpWithPropertyPaths(newNode.triples, triple)
+                }
             }
         }
         return newNode
