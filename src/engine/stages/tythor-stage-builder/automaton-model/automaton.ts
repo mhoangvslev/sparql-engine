@@ -1,6 +1,6 @@
 import { State } from "./state"
 import { Transition } from "./transition"
-import { ClosureTransition } from "./closure-transition"
+import { TransitiveTransition } from "./transitive-transition"
 
 /**
  * @author Julien Aimonier-Davat
@@ -8,18 +8,18 @@ import { ClosureTransition } from "./closure-transition"
 export class Automaton<T extends Transition> {
     
     private _states: Array<State>
-    private _transitions: Array<T | ClosureTransition<T>>
+    private _transitions: Array<T | TransitiveTransition>
 
     constructor() {
         this._states = new Array<State>()
-        this._transitions = new Array<T>()
+        this._transitions = new Array()
     }
 
     get states(): Array<State> {
         return this._states
     }
 
-    get transitions(): Array<T | ClosureTransition<T>> {
+    get transitions(): Array<T | TransitiveTransition> {
         return this._transitions
     }
 
@@ -39,19 +39,19 @@ export class Automaton<T extends Transition> {
         })
     }
 
-    public findTransitionsFrom(from: State): Array<T | ClosureTransition<T>> {
-        return this.transitions.filter((transition: T | ClosureTransition<T>) => {
+    public findTransitionsFrom(from: State): Array<T | TransitiveTransition> {
+        return this.transitions.filter((transition: T | TransitiveTransition) => {
             return transition.from.equals(from)
         })
     }
 
-    public findTransition(from: State, to: State): T | ClosureTransition<T> | undefined {
-        return this.transitions.find((transition: T | ClosureTransition<T>) => {
+    public findTransition(from: State, to: State): T | TransitiveTransition | undefined {
+        return this.transitions.find((transition: T | TransitiveTransition) => {
             return transition.from.equals(from) && transition.to.equals(to)
         })
     }
 
-    public addTransition(transition: T | ClosureTransition<T>): void {
+    public addTransition(transition: T | TransitiveTransition): void {
         this.transitions.push(transition)
     }
 

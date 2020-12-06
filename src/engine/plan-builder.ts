@@ -42,7 +42,7 @@ import select from '../operators/modifiers/select'
 // Stage builders
 import StageBuilder from './stages/stage-builder'
 import AggregateStageBuilder from './stages/aggregate-stage-builder'
-import BGPStageBuilder from './stages/ppaths-bgp-stage-builder'
+import BGPStageBuilder from './stages/bgp-stage-builder'
 import BindStageBuilder from './stages/bind-stage-builder'
 import DistinctStageBuilder from './stages/distinct-stage-builder'
 import FilterStageBuilder from './stages/filter-stage-builder'
@@ -444,7 +444,7 @@ export class PlanBuilder {
         let triple = triples.shift()
         bucket.push(triple!)
         variables.push(...getVariables(triple!))
-        let is_path_bucket = (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))
+        let is_path_bucket = (typeof triple!.predicate !== "string")
         while (triples.length > 0) {
           let position = findConnectedPattern(variables, triples)
           if (position < 0) {
@@ -453,7 +453,7 @@ export class PlanBuilder {
           triple = triples[position]
           triples.splice(position, 1)
           variables.push(...getVariables(triple!))
-          if (is_path_bucket === (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))) {
+          if (is_path_bucket === (typeof triple!.predicate !== "string")) {
             bucket.push(triple)
           } else {
             console.log(bucket)

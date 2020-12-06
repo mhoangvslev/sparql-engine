@@ -1,15 +1,14 @@
 import { State } from "./state"
 import { Instruction } from "./instruction"
-import { Transition } from "./transition"
 import { Algebra } from "sparqljs"
-import { rdf } from "../../../../api"
-import { SequenceTransition } from "./sequence-transition"
+import { rdf, Graph, ExecutionContext, PipelineStage, Bindings } from "../../../../api"
+import { NonTransitiveTransition } from "./non-transitive-transition"
 
 
 /**
  * @author Julien Aimonier-Davat
  */
-export class AlternativeTransition extends Transition {
+export class AlternativeTransition extends NonTransitiveTransition {
     private _instructions: Array<Array<Instruction>>
 
     constructor(from: State, to: State) {
@@ -21,32 +20,71 @@ export class AlternativeTransition extends Transition {
         return this._instructions
     }
 
-    public buildQuery(subject: string, object: string, joinPrefix: string = 'tythorJoin', filterPrefix: string = 'tythorFilter'): Algebra.RootNode {
-        if (this.instructions.length === 1) {
-            let transition = new SequenceTransition(this.from, this.to)
-            transition.instructions.push(...this.instructions[0])
-            return transition.buildQuery(subject, object, joinPrefix, filterPrefix)
-        }
+    private buildBGP(subject: string, object: string, instructions: Instruction[]): Algebra.GroupNode {
+        let triples = new Array<Algebra.TripleObject>()
+        let filters = new Array<Algebra.FilterNode>()
         
+        let joinVar = 0
+        let filterVar = 0
+
+        for (let index = 0, len = instructions.length; index < len; index++) {
+            let tripleSubject = (index === 0) ? subject : `?tythorJoin_${joinVar}`
+            let tripleObject = (index === len - 1) ? object : `?tythorJoin_${joinVar + 1}`
+            let instruction = instructions[index]
+            triples.push({
+                subject: instruction.inverse ? tripleObject : tripleSubject,
+                predicate: instruction.negation ? `?tythorFilter_${filterVar}` : instruction.properties[0],
+                object: instruction.inverse ? tripleSubject : tripleObject
+            })
+            if (instruction.negation) {
+                filters.push(this.buildFilter(`?tythorFilter_${filterVar}`, instruction.properties))
+            }
+            joinVar++
+            filterVar++
+        }
+        return {
+            type: 'group',
+            patterns: [{
+                type: 'bgp',
+                triples: triples
+            } as Algebra.BGPNode, ...filters]
+        }
+    }
+
+    private buildConjunctiveQuery(subject: string, object: string, instructions: Instruction[]): Algebra.RootNode {
         let query: Algebra.RootNode = {
             type: 'query',
             queryType: 'SELECT',
             prefixes: {},
             variables: [subject, object].filter((variable) => rdf.isVariable(variable)),
-            where: []
+            where: [this.buildBGP(subject, object, instructions)]
         }
-
-        let union: Algebra.GroupNode = {
-            type: 'union',
-            patterns: this.instructions.map((path) => {
-                let transition = new SequenceTransition(this.from, this.to)
-                transition.instructions.push(...path)
-                return transition.buildQuery(subject, object, joinPrefix, filterPrefix).where[0]
-            })
-        }
-        query.where = [union]
-
         return query
+    }
+
+    private buildUnionConjunctiveQuery(subject: string, object: string): Algebra.RootNode {
+        if (this.instructions.length === 1) {
+            return this.buildConjunctiveQuery(subject, object, this.instructions[0])
+        }
+        let query: Algebra.RootNode = {
+            type: 'query',
+            queryType: 'SELECT',
+            prefixes: {},
+            variables: [subject, object].filter((variable) => rdf.isVariable(variable)),
+            where: [{
+                type: 'union',
+                patterns: this.instructions.map((path) => {
+                    let conjunctiveQuery = this.buildConjunctiveQuery(subject, object, path)
+                    return conjunctiveQuery.where[0]
+                })
+            } as Algebra.GroupNode]
+        }
+        return query
+    }
+
+    public eval(subject: string, object: string, graph: Graph, context: ExecutionContext): PipelineStage<Bindings> {
+        let query = this.buildUnionConjunctiveQuery(subject, object)
+        return graph.evalQuery(query, context)
     }
 
     public print(marginLeft: number): void {

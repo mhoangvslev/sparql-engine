@@ -3,8 +3,8 @@ import { State } from '../automaton-model/state'
 import { SequenceTransition } from '../automaton-model/sequence-transition'
 import { cloneDeep } from 'lodash'
 import { PropertyTransition } from '../automaton-model/property-transition'
-import { isClosureTransition } from '../utils'
-import { ClosureTransition } from '../automaton-model/closure-transition'
+import { isTransitiveTransition } from '../utils'
+import { TransitiveTransition } from '../automaton-model/transitive-transition'
 
 /**
  * @author Julien Aimonier-Davat
@@ -21,15 +21,14 @@ export class PathsCompressionOptimizer {
         return !state.isFinal
     }
 
-    private buildPathsFrom(automaton: Automaton<PropertyTransition>, state: State): Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>> {
-        let paths = new Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>>()
-        let stack = new Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>>()
+    private buildPathsFrom(automaton: Automaton<PropertyTransition>, state: State): Array<Array<SequenceTransition | TransitiveTransition>> {
+        let paths = new Array<Array<SequenceTransition | TransitiveTransition>>()
+        let stack = new Array<Array<SequenceTransition | TransitiveTransition>>()
         
         for (let transition of automaton.findTransitionsFrom(state)) {
-            if (isClosureTransition(transition)) {
-                let nestedAutomaton = this.optimize(transition.automaton)
-                let closureTransition = new ClosureTransition<SequenceTransition>(transition.from, transition.to, nestedAutomaton)
-                stack.push([closureTransition])
+            if (isTransitiveTransition(transition)) {
+                let transitiveTransition = new TransitiveTransition(transition.from, transition.to, transition.expression)
+                stack.push([transitiveTransition])
             } else {
                 let sequenceTransition = new SequenceTransition(transition.from, transition.to)
                 sequenceTransition.instructions.push(transition.instruction)
@@ -46,11 +45,10 @@ export class PathsCompressionOptimizer {
                 for (let transition of automaton.findTransitionsFrom(last.to)) {
                     let branch = cloneDeep(path)
                     let branchLast = branch[branch.length - 1]
-                    if (isClosureTransition(branchLast)) {
-                        if (isClosureTransition(transition)) {
-                            let nestedAutomaton = this.optimize(transition.automaton)
-                            let closureTransition = new ClosureTransition<SequenceTransition>(transition.from, transition.to, nestedAutomaton)
-                            branch.push(closureTransition)
+                    if (isTransitiveTransition(branchLast)) {
+                        if (isTransitiveTransition(transition)) {
+                            let transitiveTransition = new TransitiveTransition(transition.from, transition.to, transition.expression)
+                            branch.push(transitiveTransition)
                             stack.push(branch)
                         } else {
                             let sequenceTransition = new SequenceTransition(transition.from, transition.to)
@@ -59,10 +57,9 @@ export class PathsCompressionOptimizer {
                             stack.push(branch)
                         }
                     } else {
-                        if (isClosureTransition(transition)) {
-                            let nestedAutomaton = this.optimize(transition.automaton)
-                            let closureTransition = new ClosureTransition<SequenceTransition>(transition.from, transition.to, nestedAutomaton)
-                            branch.push(closureTransition)
+                        if (isTransitiveTransition(transition)) {
+                            let transitiveTransition = new TransitiveTransition(transition.from, transition.to, transition.expression)
+                            branch.push(transitiveTransition)
                             stack.push(branch)
                         } else {
                             let sequenceTransition = new SequenceTransition(transition.from, transition.to)
@@ -80,8 +77,8 @@ export class PathsCompressionOptimizer {
         return paths
     }
 
-    private buildPaths(automaton: Automaton<PropertyTransition>): Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>> {
-        let paths = new Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>>()
+    private buildPaths(automaton: Automaton<PropertyTransition>): Array<Array<SequenceTransition | TransitiveTransition>> {
+        let paths = new Array<Array<SequenceTransition | TransitiveTransition>>()
 
         let visited = new Set<number>()
         let stack = new Array<State>()
@@ -92,7 +89,7 @@ export class PathsCompressionOptimizer {
 
         while (stack.length > 0) {
             let currentState = stack.pop()!
-            let pathsFromCurrentState: Array<Array<SequenceTransition | ClosureTransition<SequenceTransition>>> = this.buildPathsFrom(automaton, currentState)
+            let pathsFromCurrentState: Array<Array<SequenceTransition | TransitiveTransition>> = this.buildPathsFrom(automaton, currentState)
             
             paths.push(...pathsFromCurrentState)
 

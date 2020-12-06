@@ -2,8 +2,8 @@ import { Automaton } from '../automaton-model/automaton'
 import { SequenceTransition } from '../automaton-model/sequence-transition'
 import { AlternativeTransition } from '../automaton-model/alternative-transition'
 import { cloneDeep } from 'lodash'
-import { isClosureTransition } from '../utils'
-import { ClosureTransition } from '../automaton-model/closure-transition'
+import { isTransitiveTransition } from '../utils'
+import { TransitiveTransition } from '../automaton-model/transitive-transition'
 
 /**
  * @author Julien Aimonier-Davat
@@ -22,11 +22,11 @@ export class PathsMergingOptimizer {
                 let alternative = new AlternativeTransition(stateA, stateB)
                 for (let transition of automaton.findTransitionsFrom(stateA)) {
                     if (transition.to.equals(stateB)) {
-                        if (isClosureTransition(transition)) {
-                            optimizedAutomaton.addTransition(new ClosureTransition<AlternativeTransition>(
+                        if (isTransitiveTransition(transition)) {
+                            optimizedAutomaton.addTransition(new TransitiveTransition(
                                 stateA,
                                 stateB,
-                                this.optimize(cloneDeep(transition.automaton))
+                                cloneDeep(transition.expression)
                             ))
                         } else {
                             alternative.instructions.push(cloneDeep(transition.instructions))

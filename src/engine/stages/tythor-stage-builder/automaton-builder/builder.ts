@@ -1,11 +1,11 @@
-import { BuilderAlgebra } from 'sparqljs'
+import { TythorAlgebra, Algebra } from 'sparqljs'
 import { cloneDeep } from 'lodash'
 import { Automaton } from '../automaton-model/automaton'
 import { State } from '../automaton-model/state'
 import { isNode, isPathNode, isPropertyNode, isClosureNode } from '../utils'
 import { PropertyTransition } from '../automaton-model/property-transition'
 import { Instruction } from '../automaton-model/instruction'
-import { ClosureTransition } from '../automaton-model/closure-transition'
+import { TransitiveTransition } from '../automaton-model/transitive-transition'
 
 function union(setA: Set<number>, setB: Set<number>): Set<number> {
     let union: Set<number> = new Set(setA);
@@ -20,110 +20,110 @@ function union(setA: Set<number>, setB: Set<number>): Set<number> {
  */
 class GlushkovAutomatonBuilder {
 
-    private syntaxTree: BuilderAlgebra.PropertyPath
-    private properties: Map<number, BuilderAlgebra.Node>
+    private syntaxTree: TythorAlgebra.PropertyPath
+    private properties: Map<number, TythorAlgebra.Node>
 
-    constructor(syntaxTree: BuilderAlgebra.PropertyPath) {
+    constructor(syntaxTree: TythorAlgebra.PropertyPath) {
         this.syntaxTree = syntaxTree
-        this.properties = new Map<number, BuilderAlgebra.Node>()
+        this.properties = new Map<number, TythorAlgebra.Node>()
     }
 
-    private visitProperty(node: BuilderAlgebra.Property) {
+    private visitProperty(node: TythorAlgebra.Property) {
         let nodeID: number = node.id!
         node.first.add(nodeID)
         node.last.add(nodeID)
         this.properties.set(nodeID, node)
     }
 
-    private visitClosure(node: BuilderAlgebra.Closure) {
+    private visitClosure(node: TythorAlgebra.Closure) {
         let nodeID: number = node.id!
         node.first.add(nodeID)
         node.last.add(nodeID)
         this.properties.set(nodeID, node)
     }
 
-    private visitSequenceExpression(node: BuilderAlgebra.PropertyPath): void {
+    private visitSequenceExpression(node: TythorAlgebra.PropertyPath): void {
         node.nullable = true
-        for (let child of (node.items as BuilderAlgebra.Node[])) {
+        for (let child of (node.items as TythorAlgebra.Node[])) {
             node.nullable = node.nullable && child.nullable
         }
         let index: number = -1
-        let child: BuilderAlgebra.Node
+        let child: TythorAlgebra.Node
         do {
             index++
-            child = node.items[index] as BuilderAlgebra.Node
+            child = node.items[index] as TythorAlgebra.Node
             node.first = union(node.first, child.first)
         } while (index < node.items.length - 1 && child.nullable)
 
         index = node.items.length
         do {
             index--
-            child = node.items[index] as BuilderAlgebra.Node
+            child = node.items[index] as TythorAlgebra.Node
             node.last = union(node.last, child.last)
         } while (index > 0 && child.nullable)
 
         for (let i = 0; i < node.items.length - 1; i++) {
-            child = node.items[i] as BuilderAlgebra.Node
+            child = node.items[i] as TythorAlgebra.Node
             for (let value of child.last) {
-                let lastOfChild: BuilderAlgebra.Node = this.properties.get(value)!
+                let lastOfChild: TythorAlgebra.Node = this.properties.get(value)!
                 let suiv: number = i
-                let nextChild: BuilderAlgebra.Node
+                let nextChild: TythorAlgebra.Node
                 do {
                     suiv++
-                    nextChild = node.items[suiv] as BuilderAlgebra.Node
+                    nextChild = node.items[suiv] as TythorAlgebra.Node
                     lastOfChild.follow = union(lastOfChild.follow, nextChild.first)
                 } while (suiv < node.items.length - 1 && nextChild.nullable)
             }
         }
     }
 
-    private visitAlternativeExpression(node: BuilderAlgebra.PropertyPath) {
-        for (let child of (node.items as BuilderAlgebra.Node[])) {
+    private visitAlternativeExpression(node: TythorAlgebra.PropertyPath) {
+        for (let child of (node.items as TythorAlgebra.Node[])) {
             node.nullable = node.nullable || child.nullable
             node.first = union(node.first, child.first)
             node.last = union(node.last, child.last)
         }
     }
 
-    private visitOneOrMoreExpression(node: BuilderAlgebra.PropertyPath) {
-        let child = node.items[0] as BuilderAlgebra.Node
+    private visitOneOrMoreExpression(node: TythorAlgebra.PropertyPath) {
+        let child = node.items[0] as TythorAlgebra.Node
         node.nullable = child.nullable
         node.first = child.first
         node.last = child.last
 
         for (let childLastID of child.last) {
-            let childLast = this.properties.get(childLastID) as BuilderAlgebra.Node
+            let childLast = this.properties.get(childLastID) as TythorAlgebra.Node
             childLast.follow = union(childLast.follow, child.first)
         }
     }
 
-    private visitZeroOrOneExpression(node: BuilderAlgebra.PropertyPath) {
-        let child = node.items[0] as BuilderAlgebra.Node
+    private visitZeroOrOneExpression(node: TythorAlgebra.PropertyPath) {
+        let child = node.items[0] as TythorAlgebra.Node
         node.nullable = true
         node.first = child.first
         node.last = child.last
     }
 
-    private visitZeroOrMoreExpression(node: BuilderAlgebra.PropertyPath) {
-        let child = node.items[0] as BuilderAlgebra.Node
+    private visitZeroOrMoreExpression(node: TythorAlgebra.PropertyPath) {
+        let child = node.items[0] as TythorAlgebra.Node
         node.nullable = true
         node.first = child.first
         node.last = child.last
 
         for (let childLastID of child.last) {
-            let childLast = this.properties.get(childLastID) as BuilderAlgebra.Node
+            let childLast = this.properties.get(childLastID) as TythorAlgebra.Node
             childLast.follow = union(childLast.follow, child.first)
         }
     }
 
-    private visitInverseExpression(node: BuilderAlgebra.PropertyPath) {
-        let child = node.items[0] as BuilderAlgebra.Node
+    private visitInverseExpression(node: TythorAlgebra.PropertyPath) {
+        let child = node.items[0] as TythorAlgebra.Node
         node.nullable = child.nullable
         node.first = child.first
         node.last = child.last
     }
 
-    private visitPath(node: BuilderAlgebra.PropertyPath) {
+    private visitPath(node: TythorAlgebra.PropertyPath) {
         switch(node.pathType) {
             case '/':
                 this.visitSequenceExpression(node)
@@ -146,21 +146,21 @@ class GlushkovAutomatonBuilder {
         }
     }
 
-    private visitNode(node: BuilderAlgebra.Node) {
+    private visitNode(node: TythorAlgebra.Node) {
         switch (node.type) {
             case "property":
-                this.visitProperty(node as BuilderAlgebra.Property)
+                this.visitProperty(node as TythorAlgebra.Property)
                 break
             case "path":
-                this.visitPath(node as BuilderAlgebra.PropertyPath)
+                this.visitPath(node as TythorAlgebra.PropertyPath)
                 break
             case "closure":
-                this.visitClosure(node as BuilderAlgebra.Closure)
+                this.visitClosure(node as TythorAlgebra.Closure)
                 break
         }
     }
 
-    private visit(node: BuilderAlgebra.Node) {
+    private visit(node: TythorAlgebra.Node) {
         if (isPathNode(node)) {
             for (let child of node.items) {
                 if (isNode(child)) {
@@ -194,7 +194,7 @@ class GlushkovAutomatonBuilder {
 
         // Adds the transitions that start from the initial state
         for (let value of root.first) {            
-            let toNode: BuilderAlgebra.Node = this.properties.get(value)!
+            let toNode: TythorAlgebra.Node = this.properties.get(value)!
             let toState: State = automaton.findState(toNode.id!)!
             if (isPropertyNode(toNode)) {
                 let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
@@ -207,17 +207,17 @@ class GlushkovAutomatonBuilder {
 
         // Adds the transitions between states
         for (let from of Array.from(this.properties.keys())) {
-            let fromNode: BuilderAlgebra.Node = this.properties.get(from)!
+            let fromNode: TythorAlgebra.Node = this.properties.get(from)!
             for (let to of fromNode.follow) {
                 let fromState: State = automaton.findState(fromNode.id!)!
-                let toNode: BuilderAlgebra.Node = this.properties.get(to)!
+                let toNode: TythorAlgebra.Node = this.properties.get(to)!
                 let toState: State = automaton.findState(toNode.id!)!
                 if (isPropertyNode(toNode)) {
                     let instruction = new Instruction(toNode.items, toNode.inverse, toNode.negation)
                     let transition = new PropertyTransition(fromState, toState, instruction)
                     automaton.addTransition(transition)
                 } else if (isClosureNode(toNode)) {
-                    let transition = new ClosureTransition(fromState, toState, toNode.automaton)
+                    let transition = new TransitiveTransition(fromState, toState, toNode.expression)
                     automaton.addTransition(transition)
                 } else {
                     throw new Error(`Unknown node encountered during automaton construction`)
@@ -233,7 +233,7 @@ class GlushkovAutomatonBuilder {
  */
 export class AutomatonBuilder {
 
-    private rewriteNegations(node: BuilderAlgebra.PropertyPath) {
+    private rewriteNegations(node: TythorAlgebra.PropertyPath) {
         for (let child of node.items) {
             if (isPathNode(child)) {
                 this.rewriteNegations(child)
@@ -244,7 +244,7 @@ export class AutomatonBuilder {
         }
     }
 
-    private addNodesIdentifiers(node: BuilderAlgebra.Node, counter: number = 1): number {
+    private addNodesIdentifiers(node: TythorAlgebra.Node, counter: number = 1): number {
         if (isPathNode(node)) {
             for (let child of node.items) {
                 if (isNode(child)) {
@@ -256,7 +256,7 @@ export class AutomatonBuilder {
         return counter
     }
 
-    private initializeTree(node: BuilderAlgebra.Node) {
+    private initializeTree(node: TythorAlgebra.Node) {
         node.first = new Set<number>()
         node.last = new Set<number>()
         node.follow = new Set<number>()
@@ -264,7 +264,7 @@ export class AutomatonBuilder {
         if (isPathNode(node)) {
             for (let [index, child] of node.items.entries()) {
                 if (typeof child === "string") {
-                    let property: BuilderAlgebra.Property = {
+                    let property: TythorAlgebra.Property = {
                         items: [child],
                         negation: false,
                         inverse: false,
@@ -282,11 +282,11 @@ export class AutomatonBuilder {
         }
     }
 
-    private rewriteNegation(node: BuilderAlgebra.PropertyPath) {
+    private rewriteNegation(node: TythorAlgebra.PropertyPath) {
         let forwardProperties = new Array<string>()
         let backwardProperties = new Array<string>()
 
-        function visitChild(pathNode: BuilderAlgebra.PropertyPath) {
+        function visitChild(pathNode: TythorAlgebra.PropertyPath) {
             for (let child of pathNode.items) {
                 if (isPropertyNode(child)) {
                     if (child.inverse) {
@@ -303,10 +303,10 @@ export class AutomatonBuilder {
         visitChild(node)
 
         node.pathType = "|"
-        node.items = new Array<BuilderAlgebra.Property>()
+        node.items = new Array<TythorAlgebra.Property>()
 
         if (backwardProperties.length > 0) {
-            let backwardNode: BuilderAlgebra.Property = {
+            let backwardNode: TythorAlgebra.Property = {
                 items: backwardProperties,
                 negation: true,
                 inverse: true,
@@ -319,7 +319,7 @@ export class AutomatonBuilder {
             node.items.push(backwardNode)
         }
         if (forwardProperties.length > 0) {
-            let forwardNode: BuilderAlgebra.Property = {
+            let forwardNode: TythorAlgebra.Property = {
                 items: forwardProperties,
                 negation: true,
                 inverse: false,
@@ -333,7 +333,7 @@ export class AutomatonBuilder {
         }
     }
 
-    private pushDownInverses(node: BuilderAlgebra.Node) {
+    private pushDownInverses(node: TythorAlgebra.Node) {
         if (isPathNode(node)) {
             for (let child of node.items) {
                 if (isNode(child)) {
@@ -347,7 +347,7 @@ export class AutomatonBuilder {
         }
     }
     
-    private inverseSequences(node: BuilderAlgebra.Node) {
+    private inverseSequences(node: TythorAlgebra.Node) {
         if (isPathNode(node)) {
             if (node.pathType === '/') {
                 node.items = node.items.reverse()
@@ -360,7 +360,7 @@ export class AutomatonBuilder {
         }
     }
     
-    private pushDownInverse(node: BuilderAlgebra.Node) {
+    private pushDownInverse(node: TythorAlgebra.Node) {
         if (isPropertyNode(node)) {
             node.inverse = !node.inverse
         } else if (isPathNode(node)) {
@@ -372,18 +372,18 @@ export class AutomatonBuilder {
         }
     }
     
-    private printTree(node: BuilderAlgebra.Node | string, depth: number = 0) {
-        node = node as BuilderAlgebra.Node
+    private printTree(node: TythorAlgebra.Node | string, depth: number = 0) {
+        node = node as TythorAlgebra.Node
         switch (node.type) {
             case "path":
-                let path = node as BuilderAlgebra.PropertyPath
+                let path = node as TythorAlgebra.PropertyPath
                 console.log(`${" ".repeat(depth)} > Path{id: ${path.id}, pathType: ${path.pathType}}`)
                 for(let i = 0; i < path.items.length; i++) {
                     this.printTree(path.items[i], depth + 3)
                 }
                 break
             case "property":
-                let property = node as BuilderAlgebra.Property
+                let property = node as TythorAlgebra.Property
                 console.log(`${" ".repeat(depth)} > Property{id: ${property.id}, 
                     items: ${property.items}, 
                     negation: ${property.negation}, 
@@ -394,7 +394,7 @@ export class AutomatonBuilder {
                     follow: ${property.follow}}`)
                 break
             case "closure":
-                let closure = node as BuilderAlgebra.Closure
+                let closure = node as TythorAlgebra.Closure
                 console.log(`${" ".repeat(depth)} > Closure{id: ${closure.id}, 
                     nullable: ${closure.nullable},
                     first: ${closure.first},
@@ -406,22 +406,20 @@ export class AutomatonBuilder {
         }
     }
 
-    private buildNestedAutomaton(node: BuilderAlgebra.Node) {
+    private buildNestedAutomaton(node: TythorAlgebra.Node) {
         if (isPathNode(node)) {
             for (let [index, child] of node.items.entries()) {
                 if (isNode(child)) {
                     this.buildNestedAutomaton(child)
                 }
                 if (isPathNode(child) && ['*', '+', '?'].includes(child.pathType)) {
-                    this.addNodesIdentifiers(child)
-                    let automaton = new GlushkovAutomatonBuilder(child).build(true)
-                    let closure: BuilderAlgebra.Closure = {
-                        automaton: automaton,
+                    let closure: TythorAlgebra.Closure = {
+                        expression: child as Algebra.PropertyPath,
                         first: new Set<number>(),
                         last: new Set<number>(),
                         follow: new Set<number>(),
                         type: 'closure',
-                        nullable: child.pathType == '*' || child.pathType == '?'
+                        nullable: false
                     }
                     node.items[index] = closure
                 }
@@ -429,23 +427,22 @@ export class AutomatonBuilder {
         }
     }
 
-    private buildAutomaton(node: BuilderAlgebra.PropertyPath) {
+    private buildAutomaton(node: TythorAlgebra.PropertyPath) {
         this.buildNestedAutomaton(node)
         this.addNodesIdentifiers(node)
         if (isPathNode(node) && ['*', '+', '?'].includes(node.pathType)) {
             let baseAutomaton = new Automaton<PropertyTransition>()
-            let initialState = new State(0, true, ['*', '?'].includes(node.pathType))
+            let initialState = new State(0, true, false)
             let finalState = new State(1, false, true)
-            let closureAutomaton = new GlushkovAutomatonBuilder(node).build(true)
             baseAutomaton.addState(initialState)
             baseAutomaton.addState(finalState)
-            baseAutomaton.addTransition(new ClosureTransition(initialState, finalState, closureAutomaton))
+            baseAutomaton.addTransition(new TransitiveTransition(initialState, finalState, node as Algebra.PropertyPath))
             return baseAutomaton
         }
         return new GlushkovAutomatonBuilder(node).build()
     }
 
-    public build(propertyPath: BuilderAlgebra.PropertyPath, forward: boolean): Automaton<PropertyTransition> {
+    public build(propertyPath: TythorAlgebra.PropertyPath, forward: boolean): Automaton<PropertyTransition> {
         let syntaxTree = cloneDeep(propertyPath)
         this.initializeTree(syntaxTree)
         if (!forward) {

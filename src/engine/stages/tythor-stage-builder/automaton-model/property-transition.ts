@@ -1,14 +1,14 @@
 import { State } from "./state"
 import { Instruction } from "./instruction"
-import { Transition } from "./transition"
 import { Algebra } from "sparqljs"
-import { rdf } from "../../../../api"
+import { rdf, Graph, ExecutionContext, PipelineStage, Bindings } from "../../../../api"
+import { NonTransitiveTransition } from "./non-transitive-transition"
 
 
 /**
  * @author Julien Aimonier-Davat
  */
-export class PropertyTransition extends Transition {
+export class PropertyTransition extends NonTransitiveTransition {
     private _instruction: Instruction
 
     constructor(from: State, to: State, instruction: Instruction) {
@@ -20,42 +20,42 @@ export class PropertyTransition extends Transition {
         return this._instruction
     }
 
-    private instructions2sparql(subject: string, object: string, joinPrefix: string = 'tythorJoin', filterPrefix: string = 'tythorFilter'): 
-    [Array<Algebra.TripleObject>, Array<Algebra.FilterNode>] {
+    private buildBGP(subject: string, object: string): Algebra.GroupNode {
         let triples = new Array<Algebra.TripleObject>()
         let filters = new Array<Algebra.FilterNode>()
         
         triples.push({
             subject: this.instruction.inverse ? object : subject,
-            predicate: this.instruction.negation ? `?${filterPrefix}_${0}` : this.instruction.properties[0],
+            predicate: this.instruction.negation ? `?tythorFilter_0` : this.instruction.properties[0],
             object: this.instruction.inverse ? subject : object
         })
         if (this.instruction.negation) {
-            filters.push(this.buildFilter(`?${filterPrefix}_${0}`, this.instruction.properties))
+            filters.push(this.buildFilter(`?tythorFilter_0`, this.instruction.properties))
         }
 
-        return [triples, filters]
+        return {
+            type: 'group',
+            patterns: [{
+                type: 'bgp',
+                triples: triples
+            } as Algebra.BGPNode, ...filters]
+        }
     }
 
-    public buildQuery(subject: string, object: string, joinPrefix: string = 'tythorJoin', filterPrefix: string = 'tythorFilter'): Algebra.RootNode {
-        let [triples, filters] = this.instructions2sparql(subject, object, joinPrefix, filterPrefix)
-
-        let bgp: Algebra.BGPNode = {
-            type: 'bgp',
-            triples: triples
-        }
-        let group: Algebra.GroupNode = {
-            type: 'group',
-            patterns: [bgp, ...filters]
-        }
+    private buildConjunctiveQuery(subject: string, object: string): Algebra.RootNode {
         let query: Algebra.RootNode = {
             type: 'query',
             queryType: 'SELECT',
             prefixes: {},
             variables: [subject, object].filter((variable) => rdf.isVariable(variable)),
-            where: [group]
+            where: [this.buildBGP(subject, object)]
         }
         return query
+    }
+
+    public eval(subject: string, object: string, graph: Graph, context: ExecutionContext): PipelineStage<Bindings> {
+        let query = this.buildConjunctiveQuery(subject, object)
+        return graph.evalQuery(query, context)
     }
 
     public print(marginLeft: number): void {

@@ -12,7 +12,6 @@ export class TythorContext {
     private _visited: Map<string, Map<string, string>>
     private _stop: boolean
     private _closure: boolean
-    private _solution: number
     
     constructor(subject: string, object: string, closure: boolean = false) {
         this._subject = subject
@@ -20,7 +19,6 @@ export class TythorContext {
         this._visited = new Map<string, Map<string, string>>()
         this._stop = false
         this._closure = closure
-        this._solution = 0
     }
 
     get subject(): string {

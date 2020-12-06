@@ -1,9 +1,5 @@
-import { Algebra } from "sparqljs"
-import { Automaton } from "../automaton-model/automaton"
-import { PropertyTransition } from "../automaton-model/property-transition"
-
 declare module "sparqljs" {
-    export namespace BuilderAlgebra {
+    export namespace TythorAlgebra {
 
         export interface Node {
             id?: number
@@ -21,7 +17,7 @@ declare module "sparqljs" {
         }
 
         export interface Closure extends Node {
-            automaton: Automaton<PropertyTransition>
+            expression: Algebra.PropertyPath
         }
 
         export interface PropertyPath extends Omit<Algebra.PropertyPath, 'items'>, Node {

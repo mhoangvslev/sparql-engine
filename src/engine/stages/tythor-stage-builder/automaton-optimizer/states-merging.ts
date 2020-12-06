@@ -4,7 +4,7 @@ import { SequenceTransition } from '../automaton-model/sequence-transition'
 import { Instruction } from '../automaton-model/instruction'
 import { cloneDeep } from 'lodash'
 import { PropertyTransition } from '../automaton-model/property-transition'
-import { isClosureTransition } from '../utils'
+import { isTransitiveTransition } from '../utils'
 
 /**
  * @author Julien Aimonier-Davat
@@ -78,9 +78,6 @@ export class StatesMergingOptimizer {
                 )
                 transition.from = optimizedAutomaton.findState(newId)!
                 transition.to = optimizedAutomaton.findState(neighbourNewId)!
-                if (isClosureTransition(transition)) {
-                    transition.automaton = this.optimize(transition.automaton)
-                }
                 optimizedAutomaton.addTransition(transition)
             }
         }

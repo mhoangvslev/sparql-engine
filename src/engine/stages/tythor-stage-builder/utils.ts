@@ -1,23 +1,28 @@
-import { BuilderAlgebra } from 'sparqljs'
+import { TythorAlgebra } from 'sparqljs'
 import { Transition } from './automaton-model/transition'
-import { ClosureTransition } from './automaton-model/closure-transition'
+import { TransitiveTransition } from './automaton-model/transitive-transition'
+import { NonTransitiveTransition } from './automaton-model/non-transitive-transition'
 
-export function isNode(node: BuilderAlgebra.Node | string): node is BuilderAlgebra.Node {
+export function isNode(node: TythorAlgebra.Node | string): node is TythorAlgebra.Node {
     return typeof node !== "string"
 }
 
-export function isPathNode(node: BuilderAlgebra.Node | string): node is BuilderAlgebra.PropertyPath {
+export function isPathNode(node: TythorAlgebra.Node | string): node is TythorAlgebra.PropertyPath {
     return typeof node !== "string" && node.type === "path"
 }
 
-export function isPropertyNode(node: BuilderAlgebra.Node | string): node is BuilderAlgebra.Property {
+export function isPropertyNode(node: TythorAlgebra.Node | string): node is TythorAlgebra.Property {
     return typeof node !== "string" && node.type === "property"
 }
 
-export function isClosureNode(node: BuilderAlgebra.Node | string): node is BuilderAlgebra.Closure {
+export function isClosureNode(node: TythorAlgebra.Node | string): node is TythorAlgebra.Closure {
     return typeof node !== "string" && node.type == "closure"
 }
 
-export function isClosureTransition(transition: Transition | ClosureTransition<Transition>): transition is ClosureTransition<Transition> {
-    return transition instanceof ClosureTransition
+export function isTransitiveTransition(transition: Transition): transition is TransitiveTransition {
+    return transition instanceof TransitiveTransition
+}
+
+export function isNonTransitiveTransition(transition: Transition): transition is NonTransitiveTransition {
+    return transition instanceof TransitiveTransition
 }

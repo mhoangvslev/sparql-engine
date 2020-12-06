@@ -4,8 +4,7 @@ import { Transition } from "../automaton-model/transition"
 import { Automaton } from "../automaton-model/automaton"
 import { TythorContext } from "./tythor-context"
 import { TythorState } from "./tythor-state"
-import { ClosureTransition } from "../automaton-model/closure-transition"
-import { isClosureTransition } from "../utils"
+import { TransitiveTransition } from "../automaton-model/transitive-transition"
 
 /**
  * @author Julien Aimonier-Davat
@@ -62,20 +61,11 @@ export class TyThorEngine {
         }
     }
 
-    protected evalTransition(searchState: TythorState, transition: Transition | ClosureTransition<Transition>, graph: Graph, context: ExecutionContext): PipelineStage<TythorState> {
+    protected evalTransition(searchState: TythorState, transition: Transition | TransitiveTransition, graph: Graph, context: ExecutionContext): PipelineStage<TythorState> {
         let engine: PipelineEngine = Pipeline.getInstance()
-        if (isClosureTransition(transition)) {
-            let ppContext = new TythorContext(searchState.object, '?tythorObject', true)
-            let nestedSearchState = new TythorState(searchState.object, searchState.object, transition.automaton.findInitialStates()[0], searchState.depth)
-            return engine.map(this.evalNext(nestedSearchState, transition.automaton, graph, ppContext, context), (solution: TythorState) => {
-                return new TythorState(searchState.subject, solution.object, transition.to, searchState.depth + solution.depth)
-            })
-        } else {
-            let query = transition.buildQuery(searchState.object, '?tythorObject')
-            return engine.map(graph.evalQuery(query, context), (solution: Bindings) => {
-                return new TythorState(searchState.subject, solution.get('?tythorObject')!, transition.to, searchState.depth + 1)
-            })
-        }   
+        return engine.map(transition.eval(searchState.object, '?tythorObject', graph, context), (solution: Bindings) => {
+            return new TythorState(searchState.subject, solution.get('?tythorObject')!, transition.to, searchState.depth + 1)
+        })
     }
 
     protected evalNext(searchState: TythorState, automaton: Automaton<Transition>, graph: Graph, ppContext: TythorContext, context: ExecutionContext): PipelineStage<TythorState> {
@@ -93,7 +83,7 @@ export class TyThorEngine {
             }
         }
 
-        let nextSolutions = engine.mergeMap(engine.from(automaton.findTransitionsFrom(searchState.state)), (transition: Transition | ClosureTransition<Transition>) => {
+        let nextSolutions = engine.mergeMap(engine.from(automaton.findTransitionsFrom(searchState.state)), (transition: Transition | TransitiveTransition) => {
             return engine.mergeMap(this.evalTransition(searchState, transition, graph, context), (result: TythorState) => {
                 return this.evalNext(result, automaton, graph, ppContext, context)
             })
@@ -106,15 +96,10 @@ export class TyThorEngine {
         let engine = Pipeline.getInstance()
         let initialState = automaton.findInitialStates()[0]
 
-        return engine.mergeMap(engine.from(automaton.findTransitionsFrom(initialState)), (transition: Transition | ClosureTransition<Transition>) => {
-            if (isClosureTransition(transition)) {
-                return this.findCandidates(transition.automaton, graph, context)
-            } else {
-                let query = transition.buildQuery('?tythorSubject', '?tythorObject')
-                return engine.mergeMap(graph.evalQuery(query, context), (solution: Bindings) => {
-                    return engine.of<string>(solution.get('?tythorSubject')!)
-                })
-            }
+        return engine.mergeMap(engine.from(automaton.findTransitionsFrom(initialState)), (transition: Transition | TransitiveTransition) => {
+            return engine.mergeMap(transition.eval('?tythorSubject', '?tythorObject', graph, context), (solution: Bindings) => {
+                return engine.of<string>(solution.get('?tythorSubject')!)
+            })
         })
     }
 

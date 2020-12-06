@@ -1,6 +1,6 @@
 import PathStageBuilder from "../path-stage-builder";
 import { Graph, ExecutionContext, PipelineStage, Pipeline, rdf } from "../../../api";
-import { BuilderAlgebra, Algebra } from "sparqljs";
+import { TythorAlgebra, Algebra } from "sparqljs";
 import { AutomatonBuilder } from "./automaton-builder/builder";
 import { PathsCompressionOptimizer } from "./automaton-optimizer/paths-compression";
 import { Automaton } from "./automaton-model/automaton";
@@ -25,17 +25,17 @@ export default class TythorStageBuilder extends PathStageBuilder {
             automaton = new PathsMergingOptimizer().optimize(
                 new PathsCompressionOptimizer().optimize(
                     new StatesMergingOptimizer().optimize(
-                        new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+                        new AutomatonBuilder().build(path as TythorAlgebra.PropertyPath, forward)
                     )
                 )
             )
         } else if (this._options['property-paths-strategy'] == 'mono-predicate-automaton') {
-            automaton = new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+            automaton = new AutomatonBuilder().build(path as TythorAlgebra.PropertyPath, forward)
         } else {
             automaton = new PathsMergingOptimizer().optimize(
                 new PathsCompressionOptimizer().optimize(
                     new StatesMergingOptimizer().optimize(
-                        new AutomatonBuilder().build(path as BuilderAlgebra.PropertyPath, forward)
+                        new AutomatonBuilder().build(path as TythorAlgebra.PropertyPath, forward)
                     )
                 )
             )
