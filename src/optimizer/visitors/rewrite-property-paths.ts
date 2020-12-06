@@ -190,6 +190,10 @@ export default class RewritePropertyPaths extends PlanVisitor {
         return false
     }
 
+    private must_be_decomposed(path: Algebra.PropertyPath): boolean {
+        return !isTransitiveClosure(path) && this.containsTransitiveClosure(path)
+    }
+
     /**
      * Visit and transform a Basic Graph Pattern node.
      * Non-transitive expressions of Property Path patterns are rewritten.
@@ -201,7 +205,7 @@ export default class RewritePropertyPaths extends PlanVisitor {
         for (let i = 0; i < newNode.triples.length; i++) {
             let triple: Algebra.TripleObject|Algebra.PathTripleObject = newNode.triples[i]
             if (this.isPathTriple(triple)) {
-                if (!isTransitiveClosure(triple.predicate) && this.containsTransitiveClosure(triple.predicate)) {
+                if (this.must_be_decomposed(triple.predicate)) {
                     newNode.triples.splice(i, 1)
                     return this.rewriteBgpWithPropertyPaths(newNode.triples, triple)
                 }

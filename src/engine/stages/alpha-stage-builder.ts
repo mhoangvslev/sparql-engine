@@ -1,7 +1,6 @@
 import PathStageBuilder from "./path-stage-builder";
 import { Graph, ExecutionContext, PipelineStage, Pipeline, Bindings, StreamPipelineInput } from "../../api";
 import { Algebra } from "sparqljs";
-import { isTransitiveClosure } from "../../utils";
 
 class State {
     private _source: string
@@ -172,41 +171,23 @@ class PipelinePathEngine extends PropertyPathEngine {
 
     public eval(subject: string, path: Algebra.PropertyPath, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
         let engine = Pipeline.getInstance()
-        if (isTransitiveClosure(path)) {
-            let visited = new Map<string, Map<string, string>>()
-            let forward = true
-            let solutions = engine.empty<State>()
-            if (subject.startsWith('?') && !obj.startsWith('?')) {
-                forward = false
-                solutions = this.evalBackward(subject, path, obj, visited, graph, context)
-            } else {
-                forward = true
-                solutions = this.evalForward(subject, path, obj, visited, graph, context)
-            }
-            return engine.map(solutions, (state) => {
-                return {
-                    subject: forward ? state.source : state.node,
-                    predicate: "",
-                    object: forward ? state.node : state.source
-                }
-            })
+        let visited = new Map<string, Map<string, string>>()
+        let forward = true
+        let solutions = engine.empty<State>()
+        if (subject.startsWith('?') && !obj.startsWith('?')) {
+            forward = false
+            solutions = this.evalBackward(subject, path, obj, visited, graph, context)
         } else {
-            return engine.map(this.evalPathPattern(subject, path, obj, path.pathType, graph, context), (bindings) => {
-                let subjectMapping = subject
-                if (bindings.has(subject)) {
-                    subjectMapping = bindings.get(subject)!
-                }
-                let objectMapping = obj
-                if (bindings.has(obj)) {
-                    objectMapping = bindings.get(obj)!
-                }
-                return {
-                    subject: subjectMapping,
-                    predicate: "",
-                    object: objectMapping
-                }
-            })
+            forward = true
+            solutions = this.evalForward(subject, path, obj, visited, graph, context)
         }
+        return engine.map(solutions, (state) => {
+            return {
+                subject: forward ? state.source : state.node,
+                predicate: "",
+                object: forward ? state.node : state.source
+            }
+        })
     }
 }
 
@@ -383,42 +364,24 @@ class AsyncPathEngine extends PropertyPathEngine {
 
     public eval(subject: string, path: Algebra.PropertyPath, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject> {
         let engine = Pipeline.getInstance()
-        if (isTransitiveClosure(path)) {
-            let visited = new Map<string, Map<string, string>>()
-            let forward = true
-            let solutions = engine.fromAsync((input: StreamPipelineInput<State>) => {
-                if (subject.startsWith('?') && !obj.startsWith('?')) {
-                    forward = false
-                    this.initEvalBackward(input, subject, path, obj, visited, graph, context)
-                } else {
-                    forward = true
-                    this.initEvalForward(input, subject, path, obj, visited, graph, context)
-                }
-            })
-            return engine.map(solutions, (state) => {
-                return {
-                    subject: forward ? state.source : state.node,
-                    predicate: "",
-                    object: forward ? state.node : state.source
-                }
-            })
-        } else {
-            return engine.map(this.evalPathPattern(subject, path, obj, path.pathType, graph, context), (bindings) => {
-                let subjectMapping = subject
-                if (bindings.has(subject)) {
-                    subjectMapping = bindings.get(subject)!
-                }
-                let objectMapping = obj
-                if (bindings.has(obj)) {
-                    objectMapping = bindings.get(obj)!
-                }
-                return {
-                    subject: subjectMapping,
-                    predicate: "",
-                    object: objectMapping
-                }
-            })
-        }
+        let visited = new Map<string, Map<string, string>>()
+        let forward = true
+        let solutions = engine.fromAsync((input: StreamPipelineInput<State>) => {
+            if (subject.startsWith('?') && !obj.startsWith('?')) {
+                forward = false
+                this.initEvalBackward(input, subject, path, obj, visited, graph, context)
+            } else {
+                forward = true
+                this.initEvalForward(input, subject, path, obj, visited, graph, context)
+            }
+        })
+        return engine.map(solutions, (state) => {
+            return {
+                subject: forward ? state.source : state.node,
+                predicate: "",
+                object: forward ? state.node : state.source
+            }
+        })
     }
 }
 
