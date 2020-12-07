@@ -193,9 +193,10 @@ class PipelinePathEngine extends PropertyPathEngine {
 
 class AsyncPathEngine extends PropertyPathEngine {
     private indexOfFrontierState(state: State, frontier: Array<State>): number {
-        for (let i = 0; i < frontier.length; i++) {
-            if (frontier[i].source === state.source && frontier[i].node === state.node) {
-                return i 
+        for (let index = 0; index < frontier.length; index++) {
+            let value = frontier[index]
+            if (state.source === value.source && state.node === value.node) {
+                return index
             }
         }
         return -1
@@ -215,11 +216,10 @@ class AsyncPathEngine extends PropertyPathEngine {
                     if (!this.isComplete(bindings)) {
                         frontier.push(new_state)
                     }
-                } else if (this.isComplete(bindings)) {
-                    let index = this.indexOfFrontierState(new_state, frontier)
-                    if (index >= 0) {
-                        frontier.splice(index, 1)
-                    }
+                }
+                let index = this.indexOfFrontierState(new_state, frontier)
+                if (this.isComplete(bindings) && index >= 0) {
+                    frontier.splice(index, 1)
                 }
             }, (reason) => {
                 reject(reason)
@@ -257,11 +257,10 @@ class AsyncPathEngine extends PropertyPathEngine {
                     if (!this.isComplete(bindings)) {
                         frontier.push(state)
                     }
-                } else if (this.isComplete(bindings)) {
-                    let index = this.indexOfFrontierState(state, frontier)
-                    if (index >= 0) {
-                        frontier.splice(index, 1)
-                    }
+                } 
+                let index = this.indexOfFrontierState(state, frontier)
+                if (this.isComplete(bindings) && index >= 0) {
+                    frontier.splice(index, 1)
                 }
             }, (reason) => {
                 reject(reason)
@@ -294,12 +293,10 @@ class AsyncPathEngine extends PropertyPathEngine {
                     if (!this.isComplete(bindings)) {
                         frontier.push(new_state)
                     }
-                } else if (this.isComplete(bindings)) {
-                    let index = this.indexOfFrontierState(new_state, frontier)
-                    if (index >= 0) {
-                        console.log('removing frontier node')
-                        frontier.splice(index, 1)
-                    }
+                }
+                let index = this.indexOfFrontierState(new_state, frontier)
+                if (this.isComplete(bindings) && index >= 0) {
+                    frontier.splice(index, 1)
                 }
             }, (reason) => {
                 reject(reason)
@@ -335,15 +332,12 @@ class AsyncPathEngine extends PropertyPathEngine {
                         input.next(state)
                     }
                     if (!this.isComplete(bindings)) {
-                        console.log('not complete')
                         frontier.push(state)
                     }
-                } else if (this.isComplete(bindings)) {
-                    let index = this.indexOfFrontierState(state, frontier)
-                    if (index >= 0) {
-                        console.log('removing frontier node')
-                        frontier.splice(index, 1)
-                    }
+                }
+                let index = this.indexOfFrontierState(state, frontier)
+                if (this.isComplete(bindings) && index >= 0) {
+                    frontier.splice(index, 1)
                 }
             }, (reason) => {
                 reject(reason)
