@@ -342,8 +342,6 @@ class AsyncPathEngine extends PropertyPathEngine {
         let newFrontier = new Array<State>()
         for (let state of frontier) {
             await this.evalNextForward(input, state, path, obj, newFrontier, visited, graph, context)
-            console.log(`eval next from source ${state.source} and node ${state.node}`)
-            console.log(newFrontier)
         }
         if (newFrontier.length > 0) {
             this.evalNextForwardFromFrontier(input, newFrontier, path, obj, visited, graph, context)
