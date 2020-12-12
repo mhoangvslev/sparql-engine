@@ -73,6 +73,7 @@ import ContextSymbols from './context/symbols'
 import { CustomFunctions } from '../operators/expressions/sparql-expression'
 import { extractPropertyPaths } from './stages/rewritings'
 import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables, isTransitiveClosure } from '../utils'
+import { type } from 'os'
 
 const QUERY_MODIFIERS = {
   SELECT: select,
@@ -412,22 +413,30 @@ export class PlanBuilder {
         // gather metadata about triple patterns
         let triples = []
         for (let triple of (group as Algebra.BGPNode).triples) {
-          let selectivity = 0
+          let selectivity = 1
           if (typeof triple.predicate === "string") {
-            if (triple.subject.startsWith('?')) {
+            if (!triple.subject.startsWith('?')) {
+              selectivity += 10
+            }
+            if (!triple.predicate.startsWith('?')) {
               selectivity += 1
             }
-            if (triple.predicate.startsWith('?')) {
-              selectivity += 1
+            if (!triple.object.startsWith('?')) {
+              selectivity += 4
             }
-            if (triple.object.startsWith('?')) {
-              selectivity += 1
+          } else if (!isTransitiveClosure(triple.predicate)) {
+            selectivity += 1
+            if (!triple.subject.startsWith('?')) {
+              selectivity += 10
             }
-          } else if (triple.subject.startsWith('?') && triple.object.startsWith('?')) {
-            if (isTransitiveClosure(triple.predicate)) {
-              selectivity = 5
-            } else {
-              selectivity = 4
+            if (!triple.object.startsWith('?')) {
+              selectivity += 4
+            }
+          } else {
+            if (!triple.subject.startsWith('?')) {
+              selectivity += 20
+            } else if (!triple.object.startsWith('?')) {
+              selectivity += 8
             }
           }
           triples.push({
@@ -437,7 +446,7 @@ export class PlanBuilder {
         }
         console.log(triples)
         // sort triples by ascending selectivity
-        triples = triples.sort((a, b) => a.selectivity - b.selectivity).map((pattern) => pattern.triple)
+        triples = triples.sort((a, b) => b.selectivity - a.selectivity).map((pattern) => pattern.triple)
         // evaluate patterns using the appropriate stage builder
         let bucket = []
         let variables = []

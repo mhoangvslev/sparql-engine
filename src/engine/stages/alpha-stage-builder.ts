@@ -79,6 +79,24 @@ abstract class PropertyPathEngine {
         return expected === actual
     }
 
+    protected markAsComplete(source: string, visited: Map<string, Map<string, string>>) {
+        if (visited.has('earlystop')) {
+            visited.get('earlystop')!.set(source, source)
+        } else {
+            let nodes = new Map<string, string>()
+            nodes.set(source, source)
+            visited.set('earlystop', nodes)
+        }
+    }
+
+    protected destinationReached(source: string, visited: Map<string, Map<string, string>>): boolean {
+        if (!visited.has('earlystop')) {
+            return false
+        } else {
+            return visited.get('earlystop')!.has(source)
+        }
+    }
+
     public abstract eval(subject: string, path: Algebra.PropertyPath, obj: string, graph: Graph, context: ExecutionContext): PipelineStage<Algebra.TripleObject>
 }
 
@@ -202,38 +220,43 @@ class AsyncPathEngine extends PropertyPathEngine {
         return -1
     }
 
-    private evalNextBackward(input: StreamPipelineInput<State>, state: State, path: Algebra.PropertyPath, subject: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<Array<State>> {
-        let frontier = new Array<State>()
-        return new Promise<Array<State>>((resolve, reject) => {
-            this.evalPathPattern('?node', path, state.node, '+', graph, context).subscribe((bindings) => {
-                let node: string = bindings.get('?node')!
-                let new_state = new State(state.source, node)
-                if (this.mustExplore(new_state, visited)) {
-                    this.markAsVisited(new_state, visited)
-                    if (this.isSolution(subject, node)) {
-                        input.next(new_state)
+    private evalNextBackward(input: StreamPipelineInput<State>, state: State, path: Algebra.PropertyPath, subject: string, frontier: Array<State>, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            if (this.destinationReached(state.source, visited)) {
+                resolve()
+            } else {
+                this.evalPathPattern('?node', path, state.node, '+', graph, context).subscribe((bindings) => {
+                    let node: string = bindings.get('?node')!
+                    let new_state = new State(state.source, node)
+                    if (this.mustExplore(new_state, visited)) {
+                        this.markAsVisited(new_state, visited)
+                        if (this.isSolution(subject, node)) {
+                            input.next(new_state)
+                            if (!subject.startsWith('?')) {
+                                this.markAsComplete(state.source, visited)
+                            }
+                        }
+                        if (!this.isComplete(bindings)) {
+                            frontier.push(new_state)
+                        }
                     }
-                    if (!this.isComplete(bindings)) {
-                        frontier.push(new_state)
+                    let index = this.indexOfFrontierState(new_state, frontier)
+                    if (this.isComplete(bindings) && index >= 0) {
+                        frontier.splice(index, 1)
                     }
-                }
-                let index = this.indexOfFrontierState(new_state, frontier)
-                if (this.isComplete(bindings) && index >= 0) {
-                    frontier.splice(index, 1)
-                }
-            }, (reason) => {
-                reject(reason)
-            }, () => {
-                resolve(frontier)
-            })
+                }, (reason) => {
+                    reject(reason)
+                }, () => {
+                    resolve()
+                })
+            }
         })
     }
 
     private async evalNextBackwardFromFrontier(input: StreamPipelineInput<State>, frontier: Array<State>, path: Algebra.PropertyPath, subject: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext) {
         let newFrontier = new Array<State>()
         for (let state of frontier) {
-            let partialFrontier = await this.evalNextBackward(input, state, path, subject, visited, graph, context)
-            newFrontier.push(...partialFrontier)
+            await this.evalNextBackward(input, state, path, subject, newFrontier, visited, graph, context)
         }
         if (newFrontier.length > 0) {
             this.evalNextBackwardFromFrontier(input, newFrontier, path, subject, visited, graph, context)
@@ -253,6 +276,9 @@ class AsyncPathEngine extends PropertyPathEngine {
                     this.markAsVisited(state, visited)
                     if (this.isSolution(subject, node)) {
                         input.next(state)
+                        if (!subject.startsWith('?')) {
+                            this.markAsComplete(state.source, visited)
+                        }
                     }
                     if (!this.isComplete(bindings)) {
                         frontier.push(state)
@@ -279,38 +305,45 @@ class AsyncPathEngine extends PropertyPathEngine {
         }
     }
 
-    private evalNextForward(input: StreamPipelineInput<State>, state: State, path: Algebra.PropertyPath, obj: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<Array<State>> {
-        let frontier = new Array<State>()
-        return new Promise<Array<State>>((resolve, reject) => {
-            this.evalPathPattern(state.node, path, '?node', '+', graph, context).subscribe((bindings) => {
-                let node: string = bindings.get('?node')!
-                let new_state = new State(state.source, node)
-                if (this.mustExplore(new_state, visited)) {
-                    this.markAsVisited(new_state, visited)
-                    if (this.isSolution(obj, node)) {
-                        input.next(new_state)
+    private evalNextForward(input: StreamPipelineInput<State>, state: State, path: Algebra.PropertyPath, obj: string, frontier: Array<State>, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            if (this.destinationReached(state.source, visited)) {
+                resolve()
+            } else {
+                this.evalPathPattern(state.node, path, '?node', '+', graph, context).subscribe((bindings) => {
+                    let node: string = bindings.get('?node')!
+                    let new_state = new State(state.source, node)
+                    if (this.mustExplore(new_state, visited)) {
+                        this.markAsVisited(new_state, visited)
+                        if (this.isSolution(obj, node)) {
+                            input.next(new_state)
+                            if (!obj.startsWith('?')) {
+                                this.markAsComplete(state.source, visited)
+                            }
+                        }
+                        if (!this.isComplete(bindings)) {
+                            frontier.push(new_state)
+                        }
                     }
-                    if (!this.isComplete(bindings)) {
-                        frontier.push(new_state)
+                    let index = this.indexOfFrontierState(new_state, frontier)
+                    if (this.isComplete(bindings) && index >= 0) {
+                        frontier.splice(index, 1)
                     }
-                }
-                let index = this.indexOfFrontierState(new_state, frontier)
-                if (this.isComplete(bindings) && index >= 0) {
-                    frontier.splice(index, 1)
-                }
-            }, (reason) => {
-                reject(reason)
-            }, () => {
-                resolve(frontier)
-            })
+                }, (reason) => {
+                    reject(reason)
+                }, () => {
+                    resolve()
+                })
+            }
         })
     }
 
     private async evalNextForwardFromFrontier(input: StreamPipelineInput<State>, frontier: Array<State>, path: Algebra.PropertyPath, obj: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext) {
         let newFrontier = new Array<State>()
         for (let state of frontier) {
-            let partialFrontier = await this.evalNextForward(input, state, path, obj, visited, graph, context)
-            newFrontier.push(...partialFrontier)
+            await this.evalNextForward(input, state, path, obj, newFrontier, visited, graph, context)
+            console.log(`eval next from source ${state.source} and node ${state.node}`)
+            console.log(newFrontier)
         }
         if (newFrontier.length > 0) {
             this.evalNextForwardFromFrontier(input, newFrontier, path, obj, visited, graph, context)
@@ -330,6 +363,9 @@ class AsyncPathEngine extends PropertyPathEngine {
                     this.markAsVisited(state, visited)
                     if (this.isSolution(obj, node)) {
                         input.next(state)
+                        if (!obj.startsWith('?')) {
+                            this.markAsComplete(state.source, visited)
+                        }
                     }
                     if (!this.isComplete(bindings)) {
                         frontier.push(state)
