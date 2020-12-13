@@ -22,7 +22,7 @@ class State {
 
 abstract class PropertyPathEngine {
 
-    protected readonly MAX_SERVER_DEPTH = 20
+    protected readonly MAX_SERVER_DEPTH = 10
 
     protected evalPathPattern(subject: string, path: Algebra.PropertyPath, obj: string, mod: string, graph: Graph, context: ExecutionContext): PipelineStage<Bindings> {
         let query: Algebra.RootNode = {
@@ -254,15 +254,21 @@ class AsyncPathEngine extends PropertyPathEngine {
     }
 
     private async evalNextBackwardFromFrontier(input: StreamPipelineInput<State>, frontier: Array<State>, path: Algebra.PropertyPath, subject: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext) {
-        let newFrontier = new Array<State>()
-        for (let state of frontier) {
-            await this.evalNextBackward(input, state, path, subject, newFrontier, visited, graph, context)
+        while (frontier.length > 0) {
+            let state = frontier.shift()!
+            await this.evalNextBackward(input, state, path, subject, frontier, visited, graph, context)
         }
-        if (newFrontier.length > 0) {
-            this.evalNextBackwardFromFrontier(input, newFrontier, path, subject, visited, graph, context)
-        } else {
-            input.complete()
-        }
+        input.complete()
+        
+        // let newFrontier = new Array<State>()
+        // for (let state of frontier) {
+        //     await this.evalNextBackward(input, state, path, subject, newFrontier, visited, graph, context)
+        // }
+        // if (newFrontier.length > 0) {
+        //     this.evalNextBackwardFromFrontier(input, newFrontier, path, subject, visited, graph, context)
+        // } else {
+        //     input.complete()
+        // }
     }
 
     private evalBackward(input: StreamPipelineInput<State>, subject: string, path: Algebra.PropertyPath, obj: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<Array<State>> {
@@ -339,15 +345,21 @@ class AsyncPathEngine extends PropertyPathEngine {
     }
 
     private async evalNextForwardFromFrontier(input: StreamPipelineInput<State>, frontier: Array<State>, path: Algebra.PropertyPath, obj: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext) {
-        let newFrontier = new Array<State>()
-        for (let state of frontier) {
-            await this.evalNextForward(input, state, path, obj, newFrontier, visited, graph, context)
+        while (frontier.length > 0) {
+            let state = frontier.shift()!
+            await this.evalNextForward(input, state, path, obj, frontier, visited, graph, context)
         }
-        if (newFrontier.length > 0) {
-            this.evalNextForwardFromFrontier(input, newFrontier, path, obj, visited, graph, context)
-        } else {
-            input.complete()
-        }
+        input.complete()
+        
+        // let newFrontier = new Array<State>()
+        // for (let state of frontier) {
+        //     await this.evalNextForward(input, state, path, obj, newFrontier, visited, graph, context)
+        // }
+        // if (newFrontier.length > 0) {
+        //     this.evalNextForwardFromFrontier(input, newFrontier, path, obj, visited, graph, context)
+        // } else {
+        //     input.complete()
+        // }
     }
 
     private evalForward(input: StreamPipelineInput<State>, subject: string, path: Algebra.PropertyPath, obj: string, visited: Map<string, Map<string, string>>, graph: Graph, context: ExecutionContext): Promise<Array<State>> {
