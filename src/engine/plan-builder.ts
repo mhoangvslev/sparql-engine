@@ -42,7 +42,7 @@ import select from '../operators/modifiers/select'
 // Stage builders
 import StageBuilder from './stages/stage-builder'
 import AggregateStageBuilder from './stages/aggregate-stage-builder'
-import BGPStageBuilder from './stages/ppaths-bgp-stage-builder'
+import BGPStageBuilder from './stages/bgp-stage-builder'
 import BindStageBuilder from './stages/bind-stage-builder'
 import DistinctStageBuilder from './stages/distinct-stage-builder'
 import FilterStageBuilder from './stages/filter-stage-builder'
@@ -54,7 +54,6 @@ import OptionalStageBuilder from './stages/optional-stage-builder'
 import OrderByStageBuilder from './stages/orderby-stage-builder'
 import UnionStageBuilder from './stages/union-stage-builder'
 import UpdateStageBuilder from './stages/update-stage-builder'
-import AlphaStageBuilder from './stages/alpha-stage-builder'
 // caching
 import { BGPCache, LRUBGPCache } from './cache/bgp-cache'
 // utilities
@@ -64,16 +63,15 @@ import {
   isString,
   isUndefined,
   some,
-  sortBy,
-  intersection
+  sortBy
 } from 'lodash'
 
 import ExecutionContext from './context/execution-context'
 import ContextSymbols from './context/symbols'
 import { CustomFunctions } from '../operators/expressions/sparql-expression'
 import { extractPropertyPaths } from './stages/rewritings'
-import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables, isTransitiveClosure } from '../utils'
-import { type } from 'os'
+import { extendByBindings, deepApplyBindings, rdf, findConnectedPattern, getVariables } from '../utils'
+import { print } from 'util'
 
 const QUERY_MODIFIERS = {
   SELECT: select,
@@ -147,11 +145,7 @@ export class PlanBuilder {
     this.use(SPARQL_OPERATION.ORDER_BY, new OrderByStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UNION, new UnionStageBuilder(this._dataset))
     this.use(SPARQL_OPERATION.UPDATE, new UpdateStageBuilder(this._dataset))
-    if (options['property-paths-strategy'] === 'alpha-operator') {
-      this.use(SPARQL_OPERATION.PROPERTY_PATH, new AlphaStageBuilder(this._dataset, options))
-    } else {
-      this.use(SPARQL_OPERATION.PROPERTY_PATH, new TythorStageBuilder(this._dataset, options))
-    }
+    this.use(SPARQL_OPERATION.PROPERTY_PATH, new TythorStageBuilder(this._dataset, options))
   }
 
   /**
@@ -214,11 +208,7 @@ export class PlanBuilder {
     }
 
     // Optimize the logical query execution plan
-    console.log(new Generator().stringify(query))
-    console.log(JSON.stringify(query))
     query = this._optimizer.optimize(query)
-    console.log(new Generator().stringify(query))
-    console.log(JSON.stringify(query))
 
     // build physical query execution plan, depending on the query type
     switch (query.type) {
@@ -396,6 +386,58 @@ export class PlanBuilder {
     }, source)
   }
 
+  _get_kind(triple: Algebra.TripleObject | Algebra.PathTripleObject): string {
+    let subject = triple.subject.startsWith('?') ? '?' : 's'
+    let predicate = 'p'
+    let object = triple.object.startsWith('?') ? '?' : 'o'
+    if (typeof triple.predicate === "string") {
+      predicate = triple.predicate.startsWith('?') ? '?' : 'p'
+    } else if (triple.predicate.pathType in ['?', '*', '+']) {
+      predicate = '*'
+    } else {
+      predicate = '-'
+    }
+    return `${subject}${predicate}${object}`
+  }
+
+  _pattern_shape_estimate(triple: Algebra.TripleObject | Algebra.PathTripleObject): number {
+    let kind = this._get_kind(triple)
+    switch (kind) {
+      case 's*o':
+      case '?*o':
+      case 's*?':
+        return 0
+      case 'spo':
+        return 1
+      case 's-o':
+        return 2
+      case 's?o':
+        return 3
+      case '?po':
+        return 4
+      case '?-o':
+        return 5
+      case 'sp?':
+        return 6
+      case 's-?':
+        return 7
+      case '??o':
+        return 8
+      case 's??':
+        return 9
+      case '?p?':
+        return 10
+      case '?-?':
+        return 11
+      case '?*?':
+        return 12
+      case '???':
+        return 13
+      default:
+        return 14
+    }
+  }
+
   /**
    * Build a physical plan for a SPARQL group clause
    * @param  source  - Input {@link PipelineStage}
@@ -404,56 +446,23 @@ export class PlanBuilder {
    * @return A {@link PipelineStage} used to evaluate the SPARQL Group
    */
   _buildGroup (source: PipelineStage<Bindings>, group: Algebra.PlanNode, context: ExecutionContext): PipelineStage<Bindings> {
-    const engine = Pipeline.getInstance()
     // Reset flags on the options for child iterators
     let childContext = context.clone()
 
     switch (group.type) {
       case 'bgp':
-        // gather metadata about triple patterns
-        let triples = []
-        for (let triple of (group as Algebra.BGPNode).triples) {
-          let selectivity = 1
-          if (typeof triple.predicate === "string") {
-            if (!triple.subject.startsWith('?')) {
-              selectivity += 10
-            }
-            if (!triple.predicate.startsWith('?')) {
-              selectivity += 1
-            }
-            if (!triple.object.startsWith('?')) {
-              selectivity += 4
-            }
-          } else if (!isTransitiveClosure(triple.predicate)) {
-            selectivity += 1
-            if (!triple.subject.startsWith('?')) {
-              selectivity += 10
-            }
-            if (!triple.object.startsWith('?')) {
-              selectivity += 4
-            }
-          } else {
-            if (!triple.subject.startsWith('?')) {
-              selectivity += 20
-            } else if (!triple.object.startsWith('?')) {
-              selectivity += 8
-            }
-          }
-          triples.push({
-            triple: triple,
-            selectivity: selectivity
-          })
-        }
-        console.log(triples)
         // sort triples by ascending selectivity
-        triples = triples.sort((a, b) => b.selectivity - a.selectivity).map((pattern) => pattern.triple)
+        let triples = (group as Algebra.BGPNode).triples.sort((a, b) => this._pattern_shape_estimate(b) - this._pattern_shape_estimate(a))
+        if (triples.length === 0) {
+          return source
+        }
         // evaluate patterns using the appropriate stage builder
         let bucket = []
         let variables = []
         let triple = triples.shift()
         bucket.push(triple!)
         variables.push(...getVariables(triple!))
-        let is_path_bucket = (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))
+        let is_path_bucket = typeof triple!.predicate !== "string"
         while (triples.length > 0) {
           let position = findConnectedPattern(variables, triples)
           if (position < 0) {
@@ -462,10 +471,10 @@ export class PlanBuilder {
           triple = triples[position]
           triples.splice(position, 1)
           variables.push(...getVariables(triple!))
-          if (is_path_bucket === (typeof triple!.predicate !== "string" && isTransitiveClosure(triple!.predicate))) {
+          if (is_path_bucket === (typeof triple!.predicate !== "string")) {
             bucket.push(triple)
           } else {
-            console.log(bucket)
+            // console.log(`BUCKET: ${JSON.stringify(bucket)}`)
             if (is_path_bucket) {
               if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
                 throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
@@ -482,7 +491,7 @@ export class PlanBuilder {
           }
         }
         if (bucket.length > 0) {
-          console.log(bucket)
+          // console.log(`BUCKET: ${JSON.stringify(bucket)}`)
           if (is_path_bucket) {
             if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
               throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')

@@ -683,7 +683,3 @@ export function findConnectedPattern(variables: Array<string>, triples: Array<Al
   }
   return -1
 }
-
-export function isTransitiveClosure(path: Algebra.PropertyPath): boolean {
-  return ['*','+','?'].includes(path.pathType)
-}
