@@ -392,7 +392,7 @@ export class PlanBuilder {
     let object = triple.object.startsWith('?') ? '?' : 'o'
     if (typeof triple.predicate === "string") {
       predicate = triple.predicate.startsWith('?') ? '?' : 'p'
-    } else if (triple.predicate.pathType in ['?', '*', '+']) {
+    } else if (['?', '*', '+'].includes(triple.predicate.pathType)) {
       predicate = '*'
     } else {
       predicate = '-'
@@ -452,7 +452,7 @@ export class PlanBuilder {
     switch (group.type) {
       case 'bgp':
         // sort triples by ascending selectivity
-        let triples = (group as Algebra.BGPNode).triples.sort((a, b) => this._pattern_shape_estimate(b) - this._pattern_shape_estimate(a))
+        let triples = (group as Algebra.BGPNode).triples.sort((a, b) => this._pattern_shape_estimate(a) - this._pattern_shape_estimate(b))
         if (triples.length === 0) {
           return source
         }
