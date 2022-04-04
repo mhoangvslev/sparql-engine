@@ -413,7 +413,7 @@ export class PlanBuilder {
         let triples = []
         for (let triple of (group as Algebra.BGPNode).triples) {
           let selectivity = 0
-          if (typeof triple.predicate === "string") {
+          if (typeof triple.predicate === 'string') {
             if (triple.subject.startsWith('?')) {
               selectivity += 1
             }
@@ -444,20 +444,20 @@ export class PlanBuilder {
         let triple = triples.shift()
         bucket.push(triple!)
         variables.push(...getVariables(triple!))
-        let is_path_bucket = (typeof triple!.predicate !== "string")
+        let isPathBucket = (typeof triple!.predicate !== 'string')
         while (triples.length > 0) {
           let position = findConnectedPattern(variables, triples)
           if (position < 0) {
-            position = 0  
+            position = 0
           }
           triple = triples[position]
           triples.splice(position, 1)
           variables.push(...getVariables(triple!))
-          if (is_path_bucket === (typeof triple!.predicate !== "string")) {
+          if (isPathBucket === (typeof triple!.predicate !== 'string')) {
             bucket.push(triple)
           } else {
             console.log(bucket)
-            if (is_path_bucket) {
+            if (isPathBucket) {
               if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
                 throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
               }
@@ -469,12 +469,12 @@ export class PlanBuilder {
               source = this._stageBuilders.get(SPARQL_OPERATION.BGP)!.execute(source, bucket, context) as PipelineStage<Bindings>
             }
             bucket = [triple]
-            is_path_bucket = !is_path_bucket
+            isPathBucket = !isPathBucket
           }
         }
         if (bucket.length > 0) {
           console.log(bucket)
-          if (is_path_bucket) {
+          if (isPathBucket) {
             if (!this._stageBuilders.has(SPARQL_OPERATION.PROPERTY_PATH)) {
               throw new Error('A PlanBuilder cannot evaluate property paths without a Stage Builder for it')
             }

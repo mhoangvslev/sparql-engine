@@ -123,10 +123,10 @@ export default class PlanVisitor {
     const newNode = cloneDeep(node)
     switch (node.expression.operator) {
       case 'exists':
-        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode)) 
+        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode))
         return newNode
       case 'notexists':
-        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode)) 
+        newNode.expression.args = node.expression.args.map(p => this.visit(p as Algebra.PlanNode))
         return newNode
       default:
         return newNode

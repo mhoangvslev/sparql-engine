@@ -28,7 +28,7 @@ import { Algebra } from 'sparqljs'
 import { BGPCache } from './engine/cache/bgp-cache'
 import { Bindings, BindingBase } from './rdf/bindings'
 import { BlankNode, Literal, NamedNode, Term } from 'rdf-js'
-import { includes, union } from 'lodash'
+import { intersection, includes, union } from 'lodash'
 import { parseZone, Moment, ISO_8601 } from 'moment'
 import { Pipeline } from './engine/pipeline/pipeline'
 import { PipelineStage } from './engine/pipeline/pipeline-engine'
@@ -40,7 +40,6 @@ import BGPStageBuilder from './engine/stages/bgp-stage-builder'
 import ExecutionContext from './engine/context/execution-context'
 import ContextSymbols from './engine/context/symbols'
 import Graph from './rdf/graph'
-import { intersection } from 'lodash'
 
 /**
  * RDF related utilities
@@ -379,7 +378,7 @@ export namespace rdf {
    * @param  str - String to test
    * @return True if the string is a SPARQL variable, False otherwise
    */
-  export function isVariable (str: string|Algebra.PropertyPath): str is string {
+  export function isVariable (str: string | Algebra.PropertyPath): str is string {
     if (typeof str !== 'string') {
       return false
     }
@@ -659,12 +658,12 @@ export function extendByBindings (source: PipelineStage<Bindings>, bindings: Bin
   return Pipeline.getInstance().map(source, (b: Bindings) => bindings.union(b))
 }
 
-export function getVariables(triple: Algebra.TripleObject|Algebra.PathTripleObject): Array<string> {
+export function getVariables (triple: Algebra.TripleObject | Algebra.PathTripleObject): Array<string> {
   let variables = new Array<string>()
   if (triple.subject.startsWith('?') && !variables.includes(triple.subject)) {
     variables.push(triple.subject)
   }
-  if (typeof triple.predicate === "string" && triple.predicate.startsWith('?') && !variables.includes(triple.predicate)) {
+  if (typeof triple.predicate === 'string' && triple.predicate.startsWith('?') && !variables.includes(triple.predicate)) {
     variables.push(triple.predicate)
   }
   if (triple.object.startsWith('?') && !variables.includes(triple.object)) {
@@ -673,17 +672,17 @@ export function getVariables(triple: Algebra.TripleObject|Algebra.PathTripleObje
   return variables
 }
 
-export function findConnectedPattern(variables: Array<string>, triples: Array<Algebra.TripleObject|Algebra.PathTripleObject>): number {
+export function findConnectedPattern (variables: Array<string>, triples: Array<Algebra.TripleObject | Algebra.PathTripleObject>): number {
   for (let i = 0; i < triples.length; i++) {
     let triple = triples[i]
-    let triple_variables = getVariables(triple)
-    if (intersection(variables, triple_variables).length > 0) {
+    let tripleVariables = getVariables(triple)
+    if (intersection(variables, tripleVariables).length > 0) {
       return i
     }
   }
   return -1
 }
 
-export function isTransitiveClosure(path: Algebra.PropertyPath): boolean {
+export function isTransitiveClosure (path: Algebra.PropertyPath): boolean {
   return ['*','+','?'].includes(path.pathType)
 }
